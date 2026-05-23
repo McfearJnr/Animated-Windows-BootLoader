@@ -164,6 +164,20 @@ static void ReadConfigResolution(struct HackBGRT_config* config, const CHAR16* l
 	}
 }
 
+static int ParsePositiveInt(const CHAR16* line, const CHAR16* key, int min_value, int max_value, int* out) {
+	const int key_len = StrLen(key);
+	if (StrnCmp(line, key, key_len) != 0) {
+		return 0;
+	}
+	int value = (int) Atoi(line + key_len);
+	if (value < min_value || value > max_value) {
+		Log(1, L"Invalid value for %s: %d\n", key, value);
+		return 1;
+	}
+	*out = value;
+	return 1;
+}
+
 void ReadConfigLine(struct HackBGRT_config* config, EFI_FILE_HANDLE base_dir, const CHAR16* line) {
 	line = TrimLeft(line);
 	if (line[0] == L'#' || line[0] == 0) {
@@ -180,6 +194,65 @@ void ReadConfigLine(struct HackBGRT_config* config, EFI_FILE_HANDLE base_dir, co
 	}
 	if (StrnCmp(line, L"image=", 6) == 0) {
 		ReadConfigImage(config, line + 6);
+		return;
+	}
+	if (StrnCmp(line, L"animation=", 10) == 0) {
+		config->animation = (StrCmp(line, L"animation=1") == 0);
+		return;
+	}
+	if (StrnCmp(line, L"animation_path=", 15) == 0) {
+		config->animation_path = line + 15;
+		return;
+	}
+	if (StrnCmp(line, L"animation_prefix=", 17) == 0) {
+		config->animation_prefix = line + 17;
+		return;
+	}
+	if (StrnCmp(line, L"animation_ext=", 14) == 0) {
+		config->animation_ext = line + 14;
+		return;
+	}
+	if (StrnCmp(line, L"animation_final=", 16) == 0) {
+		const CHAR16* value = line + 16;
+		if (StriCmp(value, L"last") == 0) {
+			config->animation_final_last = 1;
+		} else if (StriCmp(value, L"splash") == 0) {
+			config->animation_final_last = 0;
+		} else {
+			Log(1, L"Invalid animation_final: %s\n", value);
+		}
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_key=", 19) == 0) {
+		const CHAR16* value = line + 19;
+		if (StriCmp(value, L"esc") == 0) {
+			config->animation_skip_esc = 1;
+		} else if (StriCmp(value, L"none") == 0) {
+			config->animation_skip_esc = 0;
+		} else {
+			Log(1, L"Invalid animation_skip_key: %s\n", value);
+		}
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_clear_each_frame=", 0, 1, &config->animation_clear_each_frame)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_preload=", 0, 1, &config->animation_preload)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_max_preload_mb=", 1, 2048, &config->animation_max_preload_mb)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_allow_frame_skip=", 0, 1, &config->animation_allow_frame_skip)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_digits=", 1, 9, &config->animation_digits)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_fps=", 1, 1000, &config->animation_fps)) {
+		return;
+	}
+	if (ParsePositiveInt(line, L"animation_max_ms=", 1, 60000, &config->animation_max_ms)) {
 		return;
 	}
 	if (StrnCmp(line, L"boot=", 5) == 0) {

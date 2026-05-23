@@ -62,14 +62,26 @@ public class Setup {
 		Other,
 	}
 
+	/**
+	 * Installer mode.
+	 */
+	public enum InstallMode {
+		Normal,
+		SideBySide,
+	}
+
 	/** @var The privileged actions. */
 	protected static readonly string[] PrivilegedActions = new string[] {
 		"install",
+		"install-side-by-side",
+		"install-side-by-side-add-order",
+		"install-side-by-side-make-default",
 		"enable-entry", "disable-entry",
 		"enable-bcdedit", "disable-bcdedit",
 		"enable-overwrite", "disable-overwrite",
 		"disable",
 		"uninstall",
+		"uninstall-side-by-side",
 		"boot-to-fw",
 		"ask-to-boot-to-fw",
 		"show-boot-log",
@@ -83,6 +95,7 @@ public class Setup {
 		"allow-secure-boot",
 		"allow-bitlocker",
 		"allow-bad-loader",
+		"side-by-side-add-order",
 	};
 
 	/** @var The target directory. */
@@ -92,6 +105,37 @@ public class Setup {
 	protected string BackupLoaderPath {
 		get {
 			return Path.Combine(InstallPath, "bootmgfw-original.efi");
+		}
+	}
+
+	/** @var Install folder relative to ESP root. */
+	protected string InstallFolderRelative {
+		get {
+			if (Mode == InstallMode.SideBySide) {
+				var cleaned = (SideBySideFolder ?? "").Replace('/', '\\').Trim();
+				if (!cleaned.StartsWith("\\")) {
+					cleaned = "\\" + cleaned;
+				}
+				return cleaned.Trim('\\');
+			}
+			return "EFI\\HackBGRT";
+		}
+	}
+
+	/** @var Loader path used for boot entry in current mode. */
+	protected string EntryLoaderPath {
+		get {
+			if (Mode == InstallMode.SideBySide) {
+				return "\\" + InstallFolderRelative.Replace('/', '\\').Trim('\\') + $"\\boot{EfiArch}.efi";
+			}
+			return EfiBootEntries.OwnLoaderPath;
+		}
+	}
+
+	/** @var Configured label for boot entry in current mode. */
+	protected string EntryLabel {
+		get {
+			return Mode == InstallMode.SideBySide ? SideBySideBootName : "HackBGRT";
 		}
 	}
 
@@ -127,6 +171,43 @@ public class Setup {
 
 	/** @var Is the loader signed? */
 	protected bool LoaderIsSigned = false;
+
+	/** @var Installer mode. */
+	protected InstallMode Mode = InstallMode.Normal;
+
+	/** @var Custom install mode from args/config. */
+	protected string InstallModeConfig = "normal";
+
+	/** @var Side-by-side folder path (EFI absolute, with leading backslash). */
+	protected string SideBySideFolder = "\\EFI\\HackBGRT-Animated\\";
+
+	/** @var Side-by-side UEFI entry label. */
+	protected string SideBySideBootName = "HackBGRT Animated Test";
+
+	/** @var Should side-by-side install make the entry default? */
+	protected bool SideBySideMakeDefault = false;
+
+	/** @var Should side-by-side install add entry to BootOrder without defaulting? */
+	protected bool SideBySideAddToBootOrder = false;
+
+	/** @var Directory for locally staged animation frames before install. */
+	protected const string LocalAnimationDir = "animation";
+
+	/** @var Directory for locally staged animation preview files. */
+	protected const string LocalAnimationPreviewDir = "animation-preview";
+
+	/** @var GIF import defaults and limits. */
+	protected const int AnimationDefaultFps = 30;
+	protected const int AnimationDefaultMaxMs = 3000;
+	protected const int AnimationDefaultMaxWidth = 400;
+	protected const int AnimationDefaultMaxHeight = 400;
+	protected const int AnimationMinMaxMs = 2000;
+	protected const int AnimationMaxMaxMs = 7000;
+	protected const int AnimationPreviewMaxFrames = 60;
+	protected const long MaxGifBytes = 32L * 1024 * 1024;
+	protected const int MaxGifPixels = 1920 * 1080;
+	protected const int MaxGifFrames = 1000;
+	protected const int WarnOutputFrames = 180;
 
 	/**
 	 * Output a line.
@@ -371,6 +452,508 @@ public class Setup {
 	}
 
 	/**
+	 * Parsed animation settings for installation.
+	 */
+	protected class AnimationSettings {
+		public bool Enabled;
+		public string Path = "\\EFI\\HackBGRT\\animation\\";
+		public string Prefix = "frame_";
+		public int Digits = 3;
+		public string Ext = ".bmp";
+		public int Fps = AnimationDefaultFps;
+		public int MaxMs = AnimationDefaultMaxMs;
+	}
+
+	/**
+	 * Exported frame information from GIF import.
+	 */
+	protected class ExportedAnimation {
+		public int SourceFrameCount;
+		public int OutputFrameCount;
+		public int Width;
+		public int Height;
+		public long EstimatedBytes;
+	}
+
+	/**
+	 * Read last value from config lines.
+	 */
+	protected static string GetConfigValue(string[] lines, string key, string fallback = null) {
+		var prefix = key + "=";
+		var value = lines.Where(s => s.StartsWith(prefix)).Select(s => s.Substring(prefix.Length)).LastOrDefault();
+		return value ?? fallback;
+	}
+
+	/**
+	 * Parse animation settings from config lines.
+	 */
+	protected static AnimationSettings ParseAnimationSettings(string[] lines) {
+		var result = new AnimationSettings();
+		result.Enabled = GetConfigValue(lines, "animation", "0") == "1";
+		result.Path = GetConfigValue(lines, "animation_path", result.Path);
+		result.Prefix = GetConfigValue(lines, "animation_prefix", result.Prefix);
+		result.Ext = GetConfigValue(lines, "animation_ext", result.Ext);
+		if (!int.TryParse(GetConfigValue(lines, "animation_digits", $"{result.Digits}"), out result.Digits) || result.Digits < 1 || result.Digits > 9) {
+			result.Digits = 3;
+		}
+		if (!int.TryParse(GetConfigValue(lines, "animation_fps", $"{result.Fps}"), out result.Fps) || result.Fps < 1 || result.Fps > 120) {
+			result.Fps = AnimationDefaultFps;
+		}
+		if (!int.TryParse(GetConfigValue(lines, "animation_max_ms", $"{result.MaxMs}"), out result.MaxMs) || result.MaxMs < AnimationMinMaxMs || result.MaxMs > AnimationMaxMaxMs) {
+			result.MaxMs = AnimationDefaultMaxMs;
+		}
+		return result;
+	}
+
+	/**
+	 * Return true if a file name matches configured animation frame naming.
+	 */
+	protected static bool IsAnimationFrameName(string fileName, AnimationSettings settings) {
+		if (!fileName.StartsWith(settings.Prefix) || !fileName.EndsWith(settings.Ext)) {
+			return false;
+		}
+		var middle = fileName.Substring(settings.Prefix.Length, fileName.Length - settings.Prefix.Length - settings.Ext.Length);
+		return middle.Length == settings.Digits && middle.All(c => '0' <= c && c <= '9');
+	}
+
+	/**
+	 * Build animation frame file name from index.
+	 */
+	protected static string BuildAnimationFrameName(AnimationSettings settings, int index) {
+		if (index < 0) {
+			throw new SetupException("Invalid animation frame index.");
+		}
+		return $"{settings.Prefix}{index.ToString().PadLeft(settings.Digits, '0')}{settings.Ext}";
+	}
+
+	/**
+	 * Build local frame path from index.
+	 */
+	protected static string BuildLocalAnimationFramePath(AnimationSettings settings, int index) {
+		return Path.Combine(LocalAnimationDir, BuildAnimationFrameName(settings, index));
+	}
+
+	/**
+	 * Remove old local animation staging files.
+	 */
+	protected static void CleanLocalAnimationStaging() {
+		if (Directory.Exists(LocalAnimationDir)) {
+			Directory.Delete(LocalAnimationDir, true);
+		}
+		if (Directory.Exists(LocalAnimationPreviewDir)) {
+			Directory.Delete(LocalAnimationPreviewDir, true);
+		}
+		Directory.CreateDirectory(LocalAnimationDir);
+		Directory.CreateDirectory(LocalAnimationPreviewDir);
+	}
+
+	/**
+	 * Remove local animation staging files.
+	 */
+	protected static void RemoveLocalAnimationStaging() {
+		if (Directory.Exists(LocalAnimationDir)) {
+			Directory.Delete(LocalAnimationDir, true);
+		}
+		if (Directory.Exists(LocalAnimationPreviewDir)) {
+			Directory.Delete(LocalAnimationPreviewDir, true);
+		}
+	}
+
+	/**
+	 * Parse integer from user input.
+	 */
+	protected static int ReadIntOrDefault(string prompt, int defaultValue, int minValue, int maxValue) {
+		WriteLine($"{prompt} [{defaultValue}]");
+		var raw = (Console.ReadLine() ?? "").Trim();
+		if (raw == "") {
+			return defaultValue;
+		}
+		if (!int.TryParse(raw, out int value) || value < minValue || value > maxValue) {
+			throw new SetupException($"Invalid value: '{raw}'. Expected {minValue}..{maxValue}.");
+		}
+		return value;
+	}
+
+	/**
+	 * Parse a hex RGB value from user input.
+	 */
+	protected static Color ReadColorOrDefault(string prompt, Color defaultColor) {
+		var defaultHex = $"{defaultColor.R:X2}{defaultColor.G:X2}{defaultColor.B:X2}";
+		WriteLine($"{prompt} [{defaultHex}]");
+		var raw = (Console.ReadLine() ?? "").Trim().TrimStart('#');
+		if (raw == "") {
+			return defaultColor;
+		}
+		if (!Regex.IsMatch(raw, "^[0-9a-fA-F]{6}$")) {
+			throw new SetupException("Background color must be 6 hex digits, e.g. 000000.");
+		}
+		return Color.FromArgb(
+			Convert.ToInt32(raw.Substring(0, 2), 16),
+			Convert.ToInt32(raw.Substring(2, 2), 16),
+			Convert.ToInt32(raw.Substring(4, 2), 16)
+		);
+	}
+
+	/**
+	 * Parse WxH from user input.
+	 */
+	protected static (int Width, int Height) ReadSizeOrDefault(string prompt, int defaultWidth, int defaultHeight) {
+		WriteLine($"{prompt} [{defaultWidth}x{defaultHeight}]");
+		var raw = (Console.ReadLine() ?? "").Trim().ToLowerInvariant();
+		if (raw == "") {
+			return (defaultWidth, defaultHeight);
+		}
+		var parts = raw.Split('x');
+		if (parts.Length != 2 || !int.TryParse(parts[0], out int width) || !int.TryParse(parts[1], out int height) || width < 32 || height < 32 || width > 1024 || height > 1024) {
+			throw new SetupException("Invalid size format. Expected WxH, for example 400x400.");
+		}
+		return (width, height);
+	}
+
+	/**
+	 * Ask a Y/N question.
+	 */
+	protected static bool AskYesNo(string question, bool defaultYes) {
+		var suffix = defaultYes ? " [Y/n]" : " [y/N]";
+		WriteLine(question + suffix);
+		var raw = (Console.ReadLine() ?? "").Trim().ToLowerInvariant();
+		if (raw == "") {
+			return defaultYes;
+		}
+		if (raw == "y" || raw == "yes") {
+			return true;
+		}
+		if (raw == "n" || raw == "no") {
+			return false;
+		}
+		throw new SetupException("Expected Y or N.");
+	}
+
+	/**
+	 * Update config.txt animation directives.
+	 */
+	protected static void UpdateAnimationConfig(bool enabled, AnimationSettings settings) {
+		var lines = File.ReadAllLines("config.txt").ToList();
+		var keys = new[] {
+			"animation=",
+			"animation_path=",
+			"animation_prefix=",
+			"animation_digits=",
+			"animation_ext=",
+			"animation_fps=",
+			"animation_max_ms=",
+			"animation_final=",
+			"animation_skip_key="
+		};
+		lines = lines.Where(line => !keys.Any(key => line.StartsWith(key))).ToList();
+		if (enabled) {
+			lines.Add($"animation=1");
+			lines.Add($"animation_path={settings.Path}");
+			lines.Add($"animation_prefix={settings.Prefix}");
+			lines.Add($"animation_digits={settings.Digits}");
+			lines.Add($"animation_ext={settings.Ext}");
+			lines.Add($"animation_fps={settings.Fps}");
+			lines.Add($"animation_max_ms={settings.MaxMs}");
+			lines.Add("animation_final=last");
+			lines.Add("animation_skip_key=esc");
+		} else {
+			lines.Add("animation=0");
+		}
+		File.WriteAllLines("config.txt", lines);
+	}
+
+	/**
+	 * Return config lines with animation disabled.
+	 */
+	protected static string[] DisableAnimationInLines(string[] lines) {
+		var output = lines.ToList();
+		var keys = new[] {
+			"animation=",
+			"animation_path=",
+			"animation_prefix=",
+			"animation_digits=",
+			"animation_ext=",
+			"animation_fps=",
+			"animation_max_ms=",
+			"animation_final=",
+			"animation_skip_key="
+		};
+		output = output.Where(line => !keys.Any(key => line.StartsWith(key))).ToList();
+		output.Add("animation=0");
+		return output.ToArray();
+	}
+
+	/**
+	 * Adjust config paths for the selected install mode.
+	 */
+	protected string[] AdjustConfigForInstallMode(string[] lines) {
+		var output = lines.ToArray();
+		if (Mode != InstallMode.SideBySide) {
+			return output;
+		}
+		var installPrefix = "\\" + InstallFolderRelative.Trim('\\') + "\\";
+		for (int i = 0; i < output.Length; ++i) {
+			if (output[i].StartsWith("animation_path=", StringComparison.OrdinalIgnoreCase)) {
+				output[i] = "animation_path=" + installPrefix + "animation\\";
+			}
+			if (!output[i].StartsWith("image=", StringComparison.OrdinalIgnoreCase)) {
+				continue;
+			}
+			var pathDelim = "path=";
+			var pos = output[i].IndexOf(pathDelim, StringComparison.OrdinalIgnoreCase);
+			if (pos < 0) {
+				continue;
+			}
+			var value = output[i].Substring(pos + pathDelim.Length);
+			if (value.StartsWith("\\EFI\\HackBGRT\\", StringComparison.OrdinalIgnoreCase) || value.StartsWith("\\EFI\\HackBGRT-Animated\\", StringComparison.OrdinalIgnoreCase)) {
+				var fileName = value.Split('\\').Last();
+				output[i] = output[i].Substring(0, pos + pathDelim.Length) + installPrefix + fileName;
+			}
+		}
+		return output;
+	}
+
+	/**
+	 * Calculate uncompressed 24-bit BMP size.
+	 */
+	protected static long EstimateBmp24Bytes(int width, int height) {
+		long pitch = ((long) width * 3 + 3) & ~3;
+		return 54 + pitch * height;
+	}
+
+	/**
+	 * Convert and stage GIF animation frames as BMP.
+	 */
+	protected ExportedAnimation ExportGifToBmpFrames(string gifPath, AnimationSettings settings, int maxWidth, int maxHeight, Color background) {
+		var gifFile = new FileInfo(gifPath);
+		if (!gifFile.Exists) {
+			throw new SetupException($"GIF file was not found: {gifPath}");
+		}
+		if (!gifFile.Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase)) {
+			throw new SetupException("Only .gif input is supported for animation import.");
+		}
+		if (gifFile.Length > MaxGifBytes) {
+			throw new SetupException($"GIF is too large ({gifFile.Length} bytes). Limit is {MaxGifBytes} bytes.");
+		}
+
+		using var gif = Image.FromFile(gifPath);
+		if (gif.RawFormat.Guid != ImageFormat.Gif.Guid) {
+			throw new SetupException("Input file is not a valid GIF.");
+		}
+		if ((long) gif.Width * gif.Height > MaxGifPixels) {
+			throw new SetupException($"GIF dimensions are too large ({gif.Width}x{gif.Height}).");
+		}
+
+		var dimension = new FrameDimension(gif.FrameDimensionsList[0]);
+		int sourceFrameCount = gif.GetFrameCount(dimension);
+		if (sourceFrameCount <= 0) {
+			throw new SetupException("GIF has no frames.");
+		}
+		if (sourceFrameCount > MaxGifFrames) {
+			throw new SetupException($"GIF has too many frames ({sourceFrameCount}). Limit is {MaxGifFrames}.");
+		}
+
+		int[] delayCs = Enumerable.Repeat(10, sourceFrameCount).ToArray();
+		try {
+			var delayProp = gif.GetPropertyItem(0x5100);
+			int available = delayProp.Value.Length / 4;
+			for (int i = 0; i < sourceFrameCount && i < available; ++i) {
+				delayCs[i] = Math.Max(1, BitConverter.ToInt32(delayProp.Value, i * 4));
+			}
+		} catch {
+			// Missing delay metadata: default 100ms per frame.
+		}
+		int[] delayMs = delayCs.Select(d => d * 10).ToArray();
+		int totalDurationMs = delayMs.Sum();
+		if (totalDurationMs <= 0) {
+			totalDurationMs = 100;
+		}
+
+		if (sourceFrameCount > WarnOutputFrames) {
+			WriteLine($"Warning: GIF has a high source frame count ({sourceFrameCount}).");
+		}
+
+		int targetWidth = maxWidth;
+		int targetHeight = maxHeight;
+		if ((long) gif.Width * targetHeight > (long) targetWidth * gif.Height) {
+			targetHeight = Math.Max(1, gif.Height * targetWidth / gif.Width);
+		} else {
+			targetWidth = Math.Max(1, gif.Width * targetHeight / gif.Height);
+		}
+
+		int outputFrameCount = Math.Max(1, settings.Fps * settings.MaxMs / 1000);
+		long estimatedBytes = EstimateBmp24Bytes(targetWidth, targetHeight) * outputFrameCount;
+		if (outputFrameCount > WarnOutputFrames) {
+			WriteLine($"Warning: output will contain {outputFrameCount} frames.");
+		}
+
+		CleanLocalAnimationStaging();
+		var previewIndices = new HashSet<int>();
+		int previewTarget = Math.Min(outputFrameCount, AnimationPreviewMaxFrames);
+		if (previewTarget <= 1) {
+			previewIndices.Add(0);
+		} else {
+			for (int p = 0; p < previewTarget; ++p) {
+				int idx = (int)Math.Round((double)p * (outputFrameCount - 1) / (previewTarget - 1));
+				previewIndices.Add(idx);
+			}
+		}
+
+		using var composed = new Bitmap(gif.Width, gif.Height, PixelFormat.Format32bppArgb);
+		using var composedGraphics = Graphics.FromImage(composed);
+		using var resized = new Bitmap(targetWidth, targetHeight, PixelFormat.Format24bppRgb);
+		using var resizedGraphics = Graphics.FromImage(resized);
+		resizedGraphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+		resizedGraphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+		resizedGraphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+		resizedGraphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+
+		int[] frameStartMs = new int[sourceFrameCount];
+		int cursorMs = 0;
+		for (int i = 0; i < sourceFrameCount; ++i) {
+			frameStartMs[i] = cursorMs;
+			cursorMs += delayMs[i];
+		}
+
+		Func<int, int> pickSourceFrameIndex = (int tMs) => {
+			int loopMs = totalDurationMs == 0 ? 0 : (tMs % totalDurationMs);
+			int selected = sourceFrameCount - 1;
+			for (int i = 0; i < sourceFrameCount; ++i) {
+				int end = frameStartMs[i] + delayMs[i];
+				if (loopMs >= frameStartMs[i] && loopMs < end) {
+					selected = i;
+					break;
+				}
+			}
+			return selected;
+		};
+
+		int frameIntervalMs = Math.Max(1, 1000 / settings.Fps);
+		int lastSourceIndex = -1;
+		for (int i = 0; i < outputFrameCount; ++i) {
+			int tMs = i * frameIntervalMs;
+			int sourceIndex = pickSourceFrameIndex(tMs);
+			if (sourceIndex != lastSourceIndex) {
+				gif.SelectActiveFrame(dimension, sourceIndex);
+				composedGraphics.Clear(background);
+				composedGraphics.DrawImage(gif, 0, 0, gif.Width, gif.Height);
+				lastSourceIndex = sourceIndex;
+			}
+
+			resizedGraphics.Clear(background);
+			resizedGraphics.DrawImage(composed, 0, 0, targetWidth, targetHeight);
+
+			string framePath = BuildLocalAnimationFramePath(settings, i + 1);
+			resized.Save(framePath, ImageFormat.Bmp);
+
+			if (previewIndices.Contains(i)) {
+				File.Copy(framePath, Path.Combine(LocalAnimationPreviewDir, Path.GetFileName(framePath)), true);
+			}
+		}
+
+		// Compatibility fallback frame for implementations that probe frame index 000 first.
+		var firstFrame = BuildLocalAnimationFramePath(settings, 1);
+		if (File.Exists(firstFrame)) {
+			File.Copy(firstFrame, BuildLocalAnimationFramePath(settings, 0), true);
+		}
+
+		return new ExportedAnimation {
+			SourceFrameCount = sourceFrameCount,
+			OutputFrameCount = outputFrameCount,
+			Width = targetWidth,
+			Height = targetHeight,
+			EstimatedBytes = estimatedBytes,
+		};
+	}
+
+	/**
+	 * Show staged animation preview.
+	 */
+	protected static void ShowAnimationPreview() {
+		WriteLine("Previewing extracted frames.");
+		try {
+			StartProcess("explorer", $"\"{Path.GetFullPath(LocalAnimationPreviewDir)}\"");
+			var firstFrame = Directory.GetFiles(LocalAnimationPreviewDir, "*.bmp").OrderBy(s => s).FirstOrDefault();
+			if (firstFrame != null) {
+				StartProcess("mspaint", $"\"{firstFrame}\"");
+			}
+		} catch (Exception e) {
+			Log($"ShowAnimationPreview failed: {e}");
+		}
+	}
+
+	/**
+	 * Install staged animation frames to ESP if enabled in config.
+	 */
+	protected string[] InstallAnimationFramesToEsp(string[] lines) {
+		var settings = ParseAnimationSettings(lines);
+		if (!settings.Enabled) {
+			return lines;
+		}
+		var expectedPrefix = "\\" + InstallFolderRelative.Trim('\\') + "\\";
+		if (!settings.Path.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase)) {
+			WriteLine($"Warning: unsupported animation_path={settings.Path}; disabling animation.");
+			return DisableAnimationInLines(lines);
+		}
+		if (!settings.Ext.Equals(".bmp", StringComparison.OrdinalIgnoreCase)) {
+			WriteLine($"Warning: unsupported animation_ext={settings.Ext}; disabling animation.");
+			return DisableAnimationInLines(lines);
+		}
+
+		if (!Directory.Exists(LocalAnimationDir)) {
+			WriteLine("Warning: local animation folder is missing; falling back to static splash.");
+			return DisableAnimationInLines(lines);
+		}
+
+		var stagedFrames = Directory.GetFiles(LocalAnimationDir, "*" + settings.Ext)
+			.Where(path => IsAnimationFrameName(Path.GetFileName(path), settings))
+			.OrderBy(path => path)
+			.ToArray();
+		if (stagedFrames.Length == 0) {
+			WriteLine("Warning: no staged animation frames were found; falling back to static splash.");
+			return DisableAnimationInLines(lines);
+		}
+
+		long outputSizeBytes = stagedFrames.Select(path => new FileInfo(path).Length).Sum();
+		WriteLine($"Animation output estimate: ~{outputSizeBytes / 1024} KiB across {stagedFrames.Length} BMP frames.");
+		try {
+			var root = Path.GetPathRoot(InstallPath);
+			if (root != null) {
+				var free = new DriveInfo(root).AvailableFreeSpace;
+				if (outputSizeBytes > free) {
+					WriteLine($"Warning: animation output may not fit the ESP ({outputSizeBytes / 1024} KiB needed, {free / 1024} KiB free).");
+				} else if (outputSizeBytes > free / 2) {
+					WriteLine($"Warning: animation output is large for available ESP free space ({free / 1024} KiB free).");
+				}
+			}
+		} catch (Exception e) {
+			Log($"Failed to read ESP free space: {e}");
+		}
+
+		var relativeAnimationDir = settings.Path.Trim('\\').Replace("\\", Path.DirectorySeparatorChar.ToString());
+		var destDir = Path.Combine(Esp.Location, relativeAnimationDir);
+		try {
+			Directory.CreateDirectory(destDir);
+
+			foreach (var old in Directory.GetFiles(destDir, "*" + settings.Ext).Where(path => IsAnimationFrameName(Path.GetFileName(path), settings))) {
+				File.Delete(old);
+			}
+			WriteLine($"Cleaned old animation frames from {destDir}.");
+
+			foreach (var src in stagedFrames) {
+				var dest = Path.Combine(destDir, Path.GetFileName(src));
+				File.Copy(src, dest, true);
+			}
+			WriteLine($"Installed {stagedFrames.Length} animation frames to {destDir}.");
+		} catch (Exception e) {
+			Log($"InstallAnimationFramesToEsp failed: {e}");
+			WriteLine("Warning: failed to install animation frames; falling back to static splash.");
+			return DisableAnimationInLines(lines);
+		}
+		return lines;
+	}
+
+	/**
 	 * Install files to ESP.
 	 */
 	protected void InstallFiles() {
@@ -385,7 +968,7 @@ public class Setup {
 		}
 		var shimSource = Path.Combine("shim-signed", $"shim{EfiArch}.efi");
 		var mmSource = Path.Combine("shim-signed", $"mm{EfiArch}.efi");
-		if (!SkipShim) {
+		if (Mode != InstallMode.SideBySide && !SkipShim) {
 			if (!File.Exists(shimSource)) {
 				throw new SetupException($"Missing shim ({shimSource}), can't install shim for {EfiArch}!");
 			}
@@ -401,14 +984,17 @@ public class Setup {
 			throw new SetupException("Failed to copy files to ESP!");
 		}
 
-		InstallFile("config.txt");
 		var lines = File.ReadAllLines("config.txt");
 		Log($"config.txt:\n{String.Join("\n", lines)}");
+		lines = AdjustConfigForInstallMode(lines);
+		lines = InstallAnimationFramesToEsp(lines);
+		File.WriteAllLines(Path.Combine(InstallPath, "config.txt"), lines);
+		WriteLine($"Installed config.txt to {Path.Combine(InstallPath, "config.txt")}.");
 		foreach (var line in lines.Where(s => s.StartsWith("image="))) {
 			var delim = "path=";
 			var i = line.IndexOf(delim);
 			if (i > 0) {
-				var dir = "\\EFI\\HackBGRT\\";
+				var dir = "\\" + InstallFolderRelative.Trim('\\') + "\\";
 				if (line.Substring(i + delim.Length).StartsWith(dir)) {
 					InstallImageFile(line.Substring(i + delim.Length + dir.Length));
 				}
@@ -417,6 +1003,16 @@ public class Setup {
 				}
 			}
 		}
+		if (Mode == InstallMode.SideBySide) {
+			var sideLoaderDest = $"boot{EfiArch}.efi";
+			InstallFile(loaderSource, sideLoaderDest);
+			if (LoaderIsSigned) {
+				InstallFile("certificate.cer");
+			}
+			WriteLine($"Side-by-side files copied to {InstallPath}.");
+			return;
+		}
+
 		var loaderDest = "loader.efi";
 		if (!SkipShim) {
 			InstallFile(shimSource, loaderDest);
@@ -548,6 +1144,105 @@ public class Setup {
 	protected void DisableEntry() {
 		new EfiBootEntries().DisableOwnEntry(DryRun);
 		WriteLine("Disabled NVRAM entry for HackBGRT.");
+	}
+
+	/**
+	 * Create side-by-side boot entry.
+	 */
+	protected void CreateSideBySideEntry(bool addToBootOrder, bool makeDefault) {
+		var e = new EfiBootEntries();
+		e.MakeEntry(EntryLoaderPath, EntryLabel, true, DryRun);
+		if (makeDefault) {
+			e.MakeEntryDefault(EntryLoaderPath, DryRun);
+			WriteLine($"Created side-by-side entry and made it default: {EntryLabel}");
+			return;
+		}
+		if (addToBootOrder) {
+			e.AddEntryWithoutDefault(EntryLoaderPath, DryRun);
+			WriteLine($"Created side-by-side entry and added it to BootOrder: {EntryLabel}");
+		} else {
+			WriteLine($"Created side-by-side entry without changing BootOrder: {EntryLabel}");
+		}
+	}
+
+	/**
+	 * Remove side-by-side boot entry by path/label.
+	 */
+	protected void RemoveSideBySideEntry() {
+		var e = new EfiBootEntries();
+		var removedByPath = e.DeleteEntry(EntryLoaderPath, DryRun);
+		var removedByLabel = e.DeleteEntryByLabel(SideBySideBootName, DryRun);
+		if (removedByPath || removedByLabel) {
+			WriteLine("Removed side-by-side firmware boot entry.");
+		} else {
+			WriteLine("Side-by-side firmware boot entry was not found.");
+		}
+	}
+
+	/**
+	 * Install side-by-side files and entry with rollback for isolated folder.
+	 */
+	protected void InstallSideBySide(bool addToBootOrder, bool makeDefault) {
+		Mode = InstallMode.SideBySide;
+		ValidateSideBySideSettings();
+		InitEspInfo();
+
+		PrintSideBySideDryRunSummary(false);
+		ConfirmSideBySideWrite(false);
+
+		var hadExistingFolder = Directory.Exists(InstallPath);
+		if (hadExistingFolder && !AskYesNo($"Folder {InstallPath} exists. Overwrite only this folder?", false)) {
+			throw new SetupException("Side-by-side install canceled by user.");
+		}
+		string backupPath = null;
+		if (hadExistingFolder) {
+			backupPath = InstallPath.TrimEnd('\\') + ".backup-" + DateTime.Now.ToString("yyyyMMddHHmmss");
+			Directory.Move(InstallPath, backupPath);
+			WriteLine($"Backed up existing side-by-side folder to {backupPath}.");
+		}
+
+		try {
+			InstallFiles();
+			CreateSideBySideEntry(addToBootOrder, makeDefault);
+			if (backupPath != null && Directory.Exists(backupPath)) {
+				Directory.Delete(backupPath, true);
+			}
+			WriteLine("Side-by-side install completed.");
+		} catch (Exception e) {
+			Log($"InstallSideBySide failed: {e}");
+			try {
+				if (Directory.Exists(InstallPath)) {
+					Directory.Delete(InstallPath, true);
+				}
+				if (backupPath != null && Directory.Exists(backupPath)) {
+					Directory.Move(backupPath, InstallPath);
+					WriteLine("Restored previous side-by-side folder backup.");
+				}
+			} catch (Exception rollbackError) {
+				Log($"InstallSideBySide rollback failed: {rollbackError}");
+			}
+			WriteLine("Side-by-side install failed after partial changes.");
+			WriteLine($"Cleanup instructions: remove {InstallPath} and delete boot entry '{SideBySideBootName}' path {EntryLoaderPath}.");
+			throw;
+		}
+	}
+
+	/**
+	 * Uninstall side-by-side entry and folder only.
+	 */
+	protected void UninstallSideBySide() {
+		Mode = InstallMode.SideBySide;
+		ValidateSideBySideSettings();
+		InitEspInfo();
+		PrintSideBySideDryRunSummary(true);
+		ConfirmSideBySideWrite(true);
+		RemoveSideBySideEntry();
+		if (Directory.Exists(InstallPath)) {
+			Directory.Delete(InstallPath, true);
+			WriteLine($"Removed side-by-side folder: {InstallPath}");
+		} else {
+			WriteLine($"Side-by-side folder not found: {InstallPath}");
+		}
 	}
 
 	/**
@@ -689,6 +1384,164 @@ public class Setup {
 			Console.ReadKey();
 		}
 		WriteLine();
+		ConfigureAnimationFromGif();
+	}
+
+	/**
+	 * Optional GIF import for pre-boot animation.
+	 */
+	protected void ConfigureAnimationFromGif() {
+		var defaults = new AnimationSettings {
+			Enabled = true,
+			Path = "\\" + InstallFolderRelative.Trim('\\') + "\\animation\\",
+			Prefix = "frame_",
+			Digits = 3,
+			Ext = ".bmp",
+			Fps = AnimationDefaultFps,
+			MaxMs = AnimationDefaultMaxMs,
+		};
+
+		if (!AskYesNo("Import animated GIF for pre-boot animation?", false)) {
+			return;
+		}
+
+		try {
+			WriteLine("Enter GIF file path:");
+			var gifPath = (Console.ReadLine() ?? "").Trim().Trim('"');
+			if (gifPath == "") {
+				throw new SetupException("No GIF file path provided.");
+			}
+
+			int fps = ReadIntOrDefault("Animation FPS (1-120)", AnimationDefaultFps, 1, 120);
+			int maxMs = ReadIntOrDefault($"Animation max duration in ms ({AnimationMinMaxMs}-{AnimationMaxMaxMs})", AnimationDefaultMaxMs, AnimationMinMaxMs, AnimationMaxMaxMs);
+			var size = ReadSizeOrDefault("Output frame size WxH", AnimationDefaultMaxWidth, AnimationDefaultMaxHeight);
+			var background = ReadColorOrDefault("Background color in RRGGBB", Color.Black);
+
+			defaults.Fps = fps;
+			defaults.MaxMs = maxMs;
+			var export = ExportGifToBmpFrames(gifPath, defaults, size.Width, size.Height, background);
+
+			WriteLine($"GIF import prepared: source frames={export.SourceFrameCount}, output frames={export.OutputFrameCount}, size={export.Width}x{export.Height}.");
+			WriteLine($"Estimated animation BMP size: ~{export.EstimatedBytes / 1024} KiB.");
+			WriteLine($"Local staged frames are in {Path.GetFullPath(LocalAnimationDir)}.");
+
+			if (AskYesNo("Preview extracted frames now?", true)) {
+				ShowAnimationPreview();
+			}
+			if (!AskYesNo("Use this animation for installation?", true)) {
+				WriteLine("Keeping static splash mode.");
+				RemoveLocalAnimationStaging();
+				UpdateAnimationConfig(false, defaults);
+				return;
+			}
+
+			UpdateAnimationConfig(true, defaults);
+			WriteLine("Enabled animation mode in config.txt.");
+		} catch (SetupException e) {
+			WriteLine($"GIF import failed: {e.Message}");
+			WriteLine("Falling back to static splash.bmp mode.");
+			RemoveLocalAnimationStaging();
+			UpdateAnimationConfig(false, defaults);
+		} catch (Exception e) {
+			Log($"ConfigureAnimationFromGif failed: {e}");
+			WriteLine("GIF import failed unexpectedly.");
+			WriteLine("Falling back to static splash.bmp mode.");
+			RemoveLocalAnimationStaging();
+			UpdateAnimationConfig(false, defaults);
+		}
+	}
+
+	/**
+	 * Check if an absolute EFI path points to a safe side-by-side folder.
+	 */
+	protected void ValidateSideBySideSettings() {
+		if (Mode != InstallMode.SideBySide) {
+			return;
+		}
+		var folder = SideBySideFolder.Replace('/', '\\').Trim();
+		if (!folder.StartsWith("\\")) {
+			folder = "\\" + folder;
+		}
+		if (!folder.EndsWith("\\")) {
+			folder += "\\";
+		}
+		if (!folder.StartsWith("\\EFI\\", StringComparison.OrdinalIgnoreCase)) {
+			throw new SetupException("side_by_side_folder must be under \\EFI\\.");
+		}
+		if (folder.Equals("\\EFI\\HackBGRT\\", StringComparison.OrdinalIgnoreCase)) {
+			throw new SetupException("side_by_side_folder must not be \\EFI\\HackBGRT\\.");
+		}
+		SideBySideFolder = folder;
+		if (String.IsNullOrWhiteSpace(SideBySideBootName)) {
+			SideBySideBootName = "HackBGRT Animated Test";
+		}
+	}
+
+	/**
+	 * Print concise firmware boot entries to the console.
+	 */
+	protected void PrintFirmwareEntries(EfiBootEntries entries) {
+		WriteLine("Current firmware boot entries:");
+		foreach (var item in entries.EnumerateKnownEntries().OrderBy(e => e.Number)) {
+			WriteLine($" Boot{item.Number:X4}: {item.Label} -> {item.FileName}");
+		}
+	}
+
+	/**
+	 * Print side-by-side dry-run summary.
+	 */
+	protected void PrintSideBySideDryRunSummary(bool uninstallMode) {
+		var entries = new EfiBootEntries();
+		PrintFirmwareEntries(entries);
+		var (msNum, _, msEntry) = entries.WindowsEntry;
+		var normalEntry = entries.EntryByPath(EfiBootEntries.OwnLoaderPath);
+		var sideEntry = entries.EntryByPath(EntryLoaderPath);
+		var sideByLabel = entries.FindEntryByLabel(SideBySideBootName);
+		var normalFolder = Path.Combine(Esp.Location, "EFI", "HackBGRT");
+		var sideFolder = InstallPath;
+
+		WriteLine();
+		WriteLine("Side-by-side mode dry-run summary:");
+		WriteLine($" install_mode={InstallModeConfig}");
+		WriteLine($" target_efi_folder=\\{InstallFolderRelative}\\");
+		WriteLine($" boot_entry_path={EntryLoaderPath}");
+		WriteLine($" boot_entry_name={SideBySideBootName}");
+		WriteLine($" side_by_side_make_default={(SideBySideMakeDefault ? 1 : 0)}");
+		WriteLine($" side_by_side_add_to_boot_order={(SideBySideAddToBootOrder ? 1 : 0)}");
+		WriteLine($" boot_order_will_change={(SideBySideMakeDefault || SideBySideAddToBootOrder ? "yes" : "no")}");
+		WriteLine($" detected_windows_boot_manager={(msEntry != null ? "yes" : "no")} (Boot{msNum:X4})");
+		WriteLine($" detected_existing_hackbgrt_folder={(Directory.Exists(normalFolder) ? "yes" : "no")}: {normalFolder}");
+		WriteLine($" detected_existing_hackbgrt_entry={(normalEntry.Item2 != null ? "yes" : "no")} path={EfiBootEntries.OwnLoaderPath}");
+		WriteLine($" detected_existing_animated_folder={(Directory.Exists(sideFolder) ? "yes" : "no")}: {sideFolder}");
+		WriteLine($" detected_existing_animated_entry={(sideEntry.Item2 != null || sideByLabel.Item2 != null ? "yes" : "no")} path={EntryLoaderPath}");
+		if (!uninstallMode) {
+			WriteLine(" files_to_copy:");
+			WriteLine($"  - config.txt -> \\{InstallFolderRelative}\\config.txt");
+			WriteLine($"  - splash.bmp + image files referenced by config");
+			WriteLine($"  - boot{EfiArch}.efi -> \\{InstallFolderRelative}\\boot{EfiArch}.efi");
+			WriteLine($"  - animation frames -> \\{InstallFolderRelative}\\animation\\ (if configured)");
+		} else {
+			WriteLine(" uninstall_targets:");
+			WriteLine($"  - remove boot entry path={EntryLoaderPath} or label={SideBySideBootName}");
+			WriteLine($"  - remove folder \\{InstallFolderRelative}\\");
+		}
+	}
+
+	/**
+	 * Ask for explicit confirmation before side-by-side writes.
+	 */
+	protected void ConfirmSideBySideWrite(bool uninstallMode) {
+		if (Batch) {
+			throw new SetupException("Side-by-side mode in batch requires explicit confirmation via interactive mode.");
+		}
+		var prompt = uninstallMode
+			? "Proceed with side-by-side uninstall? (type YES)"
+			: "Proceed with side-by-side install? (type YES)";
+		WriteLine(prompt);
+		var answer = (Console.ReadLine() ?? "").Trim();
+		if (!String.Equals(answer, "YES", StringComparison.Ordinal)) {
+			throw new SetupException("Side-by-side action canceled by user.");
+		}
 	}
 
 	/**
@@ -853,6 +1706,45 @@ public class Setup {
 	}
 
 	/**
+	 * Parse bool-ish value from string.
+	 */
+	protected static bool ParseBool01(string value, bool defaultValue = false) {
+		if (String.IsNullOrWhiteSpace(value)) {
+			return defaultValue;
+		}
+		var v = value.Trim().ToLowerInvariant();
+		return v == "1" || v == "true" || v == "yes" || v == "y";
+	}
+
+	/**
+	 * Parse setup options from command line arguments.
+	 */
+	protected void ApplyInstallerOptions(string[] args) {
+		InstallModeConfig = args.Where(s => s.StartsWith("install_mode=")).Select(s => s.Substring("install_mode=".Length)).LastOrDefault() ?? InstallModeConfig;
+		Mode = InstallModeConfig.Equals("side_by_side", StringComparison.OrdinalIgnoreCase) ? InstallMode.SideBySide : InstallMode.Normal;
+
+		var sideFolderArg = args.Where(s => s.StartsWith("side_by_side_folder=")).Select(s => s.Substring("side_by_side_folder=".Length)).LastOrDefault();
+		if (!String.IsNullOrWhiteSpace(sideFolderArg)) {
+			SideBySideFolder = sideFolderArg;
+		}
+		var sideNameArg = args.Where(s => s.StartsWith("side_by_side_boot_name=")).Select(s => s.Substring("side_by_side_boot_name=".Length)).LastOrDefault();
+		if (!String.IsNullOrWhiteSpace(sideNameArg)) {
+			SideBySideBootName = sideNameArg;
+		}
+		var sideDefaultArg = args.Where(s => s.StartsWith("side_by_side_make_default=")).Select(s => s.Substring("side_by_side_make_default=".Length)).LastOrDefault();
+		if (!String.IsNullOrWhiteSpace(sideDefaultArg)) {
+			SideBySideMakeDefault = ParseBool01(sideDefaultArg, false);
+		}
+		var sideAddArg = args.Where(s => s.StartsWith("side_by_side_add_to_boot_order=")).Select(s => s.Substring("side_by_side_add_to_boot_order=".Length)).LastOrDefault();
+		if (!String.IsNullOrWhiteSpace(sideAddArg)) {
+			SideBySideAddToBootOrder = ParseBool01(sideAddArg, false);
+		}
+		if (args.Contains("side-by-side-add-order")) {
+			SideBySideAddToBootOrder = true;
+		}
+	}
+
+	/**
 	 * Set the EFI architecture.
 	 *
 	 * @param arch The architecture.
@@ -881,7 +1773,7 @@ public class Setup {
 	 * Initialize information for the Setup.
 	 */
 	protected void InitEspInfo() {
-		InstallPath = Path.Combine(Esp.Location, "EFI", "HackBGRT");
+		InstallPath = InstallFolderRelative.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries).Aggregate(Esp.Location, Path.Combine);
 		var detectedArch = DetectArchFromFile(Esp.MsLoaderPath);
 		if (detectedArch == null) {
 			WriteLine($"Failed to detect arch from MS boot loader, using arch={EfiArch}.");
@@ -943,6 +1835,14 @@ public class Setup {
 		WriteLine("     - use as last resort; may brick your system if configured incorrectly");
 		WriteLine(" F = install files only");
 		WriteLine("     - ok for updating config, doesn't touch boot entries");
+		WriteLine(" T = install side-by-side test");
+		WriteLine("     - installs to \\EFI\\HackBGRT-Animated\\ by default");
+		WriteLine("     - creates separate 'HackBGRT Animated Test' entry");
+		WriteLine("     - does NOT change BootOrder by default");
+		WriteLine(" Y = install side-by-side + add to boot order");
+		WriteLine("     - creates separate test entry and adds it after Windows");
+		WriteLine(" U = uninstall side-by-side test");
+		WriteLine("     - removes only test entry/folder, keeps normal HackBGRT");
 		WriteLine(" D = disable");
 		WriteLine("     - removes created entries, restores MS boot loader");
 		WriteLine(" R = remove completely");
@@ -956,7 +1856,7 @@ public class Setup {
 		var k = Console.ReadKey().Key;
 		Log($"User input: {k}");
 		WriteLine();
-		if (k == ConsoleKey.I || k == ConsoleKey.J || k == ConsoleKey.O || k == ConsoleKey.F) {
+		if (k == ConsoleKey.I || k == ConsoleKey.J || k == ConsoleKey.O || k == ConsoleKey.F || k == ConsoleKey.T || k == ConsoleKey.Y) {
 			Configure();
 		}
 		if (k == ConsoleKey.I) {
@@ -967,6 +1867,12 @@ public class Setup {
 			RunPrivilegedActions(new string[] { "disable", "install", "enable-overwrite" });
 		} else if (k == ConsoleKey.F) {
 			RunPrivilegedActions(new string[] { "disable-overwrite", "install" });
+		} else if (k == ConsoleKey.T) {
+			RunPrivilegedActions(new string[] { "install-side-by-side" });
+		} else if (k == ConsoleKey.Y) {
+			RunPrivilegedActions(new string[] { "install-side-by-side-add-order" });
+		} else if (k == ConsoleKey.U) {
+			RunPrivilegedActions(new string[] { "uninstall-side-by-side" });
 		} else if (k == ConsoleKey.D) {
 			RunPrivilegedActions(new string[] { "disable" });
 		} else if (k == ConsoleKey.R) {
@@ -1007,6 +1913,7 @@ public class Setup {
 		}
 
 		InitEspPath();
+		ValidateSideBySideSettings();
 		InitEspInfo();
 		Func<string> tryGetBootLog = () => {
 			try {
@@ -1055,14 +1962,20 @@ public class Setup {
 			CheckEntries();
 			Execute("bcdedit", "/enum firmware", true);
 		};
-		foreach (var arg in actions) {
-			Log($"Running action '{arg}'.");
-			if (arg == "install") {
-				InstallFiles();
-			} else if (arg == "enable-entry") {
-				enable(() => EnableEntry(), () => DisableEntry());
-			} else if (arg == "disable-entry") {
-				DisableEntry();
+			foreach (var arg in actions) {
+				Log($"Running action '{arg}'.");
+				if (arg == "install") {
+					InstallFiles();
+				} else if (arg == "install-side-by-side") {
+					InstallSideBySide(SideBySideAddToBootOrder, SideBySideMakeDefault);
+				} else if (arg == "install-side-by-side-add-order") {
+					InstallSideBySide(true, false);
+				} else if (arg == "install-side-by-side-make-default") {
+					InstallSideBySide(true, true);
+				} else if (arg == "enable-entry") {
+					enable(() => EnableEntry(), () => DisableEntry());
+				} else if (arg == "disable-entry") {
+					DisableEntry();
 			} else if (arg == "enable-bcdedit") {
 				enable(() => EnableBCDEdit(), () => DisableBCDEdit());
 			} else if (arg == "disable-bcdedit") {
@@ -1071,12 +1984,14 @@ public class Setup {
 				enable(() => OverwriteMsLoader(), () => RestoreMsLoader());
 			} else if (arg == "disable-overwrite") {
 				RestoreMsLoader();
-			} else if (arg == "disable") {
-				Disable();
-			} else if (arg == "uninstall") {
-				Uninstall();
-			} else if (arg == "ask-to-boot-to-fw") {
-				AskToBootToFW();
+				} else if (arg == "disable") {
+					Disable();
+				} else if (arg == "uninstall") {
+					Uninstall();
+				} else if (arg == "uninstall-side-by-side") {
+					UninstallSideBySide();
+				} else if (arg == "ask-to-boot-to-fw") {
+					AskToBootToFW();
 			} else if (arg == "boot-to-fw") {
 				BootToFW();
 			} else if (arg == "show-boot-log") {
@@ -1115,7 +2030,17 @@ public class Setup {
 		AllowSecureBoot = args.Contains("allow-secure-boot");
 		AllowBitLocker = args.Contains("allow-bitlocker");
 		SkipShim = args.Contains("skip-shim");
-		ForwardArguments = String.Join(" ", args.Where(s => ForwardableArguments.Contains(s) || s.StartsWith("arch=") || s.StartsWith("esp=")));
+		ApplyInstallerOptions(args);
+		ForwardArguments = String.Join(" ", args.Where(s =>
+			ForwardableArguments.Contains(s)
+			|| s.StartsWith("arch=")
+			|| s.StartsWith("esp=")
+			|| s.StartsWith("install_mode=")
+			|| s.StartsWith("side_by_side_folder=")
+			|| s.StartsWith("side_by_side_boot_name=")
+			|| s.StartsWith("side_by_side_make_default=")
+			|| s.StartsWith("side_by_side_add_to_boot_order=")
+		));
 		try {
 			if (!(Directory.Exists("efi") || Directory.Exists("efi-signed")) || !File.Exists("config.txt")) {
 				WriteLine("This setup program is not in the correct directory!");

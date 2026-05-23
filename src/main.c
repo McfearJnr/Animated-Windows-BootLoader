@@ -21,6 +21,18 @@ EFI_RUNTIME_SERVICES *RT;
  */
 static struct HackBGRT_config config = {
 	.log = 1,
+	.animation_path = L"\\EFI\\HackBGRT\\animation\\",
+	.animation_prefix = L"frame_",
+	.animation_digits = 3,
+	.animation_ext = L".bmp",
+	.animation_fps = 24,
+	.animation_max_ms = 3500,
+	.animation_final_last = 1,
+	.animation_skip_esc = 1,
+	.animation_clear_each_frame = 1,
+	.animation_preload = 1,
+	.animation_max_preload_mb = 64,
+	.animation_allow_frame_skip = 0,
 };
 
 /**
@@ -235,6 +247,50 @@ static BMP* MakeBMP(int w, int h, UINT8 r, UINT8 g, UINT8 b) {
 	return bmp;
 }
 
+static BOOLEAN ParseBMPGeometry(const BMP* bmp, INT32* width, INT32* height, BOOLEAN* top_down) {
+	const INT32 w = (INT32) bmp->width;
+	const INT32 h = (INT32) bmp->height;
+	if (w <= 0 || h == 0 || h == (INT32) 0x80000000) {
+		return FALSE;
+	}
+	*width = w;
+	*height = h < 0 ? -h : h;
+	*top_down = h < 0;
+	return TRUE;
+}
+
+static BOOLEAN ValidateBMPData(const BMP* bmp, UINTN size, UINT32* row_size, INT32* width, INT32* height, BOOLEAN* top_down) {
+	if (!bmp || size < sizeof(BMP) || CompareMem(bmp, "BM", 2) != 0 || bmp->planes != 1) {
+		return FALSE;
+	}
+	if (bmp->compression != 0 || (bmp->bpp != 24 && bmp->bpp != 32)) {
+		return FALSE;
+	}
+	if (!ParseBMPGeometry(bmp, width, height, top_down)) {
+		return FALSE;
+	}
+	if (bmp->pixel_data_offset >= size || bmp->pixel_data_offset >= bmp->file_size || bmp->file_size > size) {
+		return FALSE;
+	}
+	if ((UINT32) (*width) > 0xffffffffU / (UINT32) bmp->bpp) {
+		return FALSE;
+	}
+	const UINT32 row_bits = (UINT32) (*width) * (UINT32) bmp->bpp;
+	const UINT32 padded_row = ((row_bits + 31U) / 32U) * 4U;
+	if (padded_row == 0 || (UINT32) (*height) > 0xffffffffU / padded_row) {
+		return FALSE;
+	}
+	const UINT32 pixel_bytes = padded_row * (UINT32) (*height);
+	if (bmp->pixel_data_offset > bmp->file_size - pixel_bytes) {
+		return FALSE;
+	}
+	if (bmp->pixel_data_offset > size - pixel_bytes) {
+		return FALSE;
+	}
+	*row_size = padded_row;
+	return TRUE;
+}
+
 /**
  * Load a bitmap or generate a black one.
  *
@@ -250,14 +306,11 @@ static BMP* LoadBMP(EFI_FILE_HANDLE base_dir, const CHAR16* path) {
 	UINTN size = 0;
 	BMP* bmp = LoadFile(base_dir, path, &size);
 	if (bmp) {
-		if (size >= bmp->file_size
-		&& CompareMem(bmp, "BM", 2) == 0
-		&& bmp->file_size > bmp->pixel_data_offset
-		&& bmp->width > 0
-		&& bmp->height > 0
-		&& (bmp->bpp == 32 || bmp->bpp == 24)
-		&& bmp->height * (-(-(bmp->width * (bmp->bpp / 8)) & ~3)) <= bmp->file_size - bmp->pixel_data_offset
-		&& bmp->compression == 0) {
+		UINT32 row_size = 0;
+		INT32 width = 0;
+		INT32 height = 0;
+		BOOLEAN top_down = FALSE;
+		if (ValidateBMPData(bmp, size, &row_size, &width, &height, &top_down) && !top_down) {
 			return bmp;
 		}
 		BS->FreePool(bmp);
@@ -277,10 +330,17 @@ static BMP* LoadBMP(EFI_FILE_HANDLE base_dir, const CHAR16* path) {
  * @param h The maximum height.
  */
 static void CropBMP(BMP* bmp, int w, int h) {
-	const int old_pitch = -(-(bmp->width * (bmp->bpp / 8)) & ~3);
+	INT32 signed_w = 0;
+	INT32 signed_h = 0;
+	BOOLEAN top_down = FALSE;
+	if (!ParseBMPGeometry(bmp, &signed_w, &signed_h, &top_down) || top_down) {
+		Log(1, L"CropBMP: unsupported BMP orientation.\n");
+		return;
+	}
+	const int old_pitch = -(-(signed_w * (bmp->bpp / 8)) & ~3);
 	bmp->image_size = 0;
-	bmp->width = min(bmp->width, w);
-	bmp->height = min(bmp->height, h);
+	bmp->width = (UINT32) min(signed_w, w);
+	bmp->height = (UINT32) min(signed_h, h);
 	const int new_pitch = -(-(bmp->width * (bmp->bpp / 8)) & ~3);
 
 	if (new_pitch < old_pitch) {
@@ -296,13 +356,479 @@ static void CropBMP(BMP* bmp, int w, int h) {
 }
 
 /**
+ * Build full animation frame path from config + frame index.
+ */
+static BOOLEAN BuildAnimationFramePath(CHAR16* out, UINTN out_len, UINT32 frame) {
+	if (!out || out_len < 2 || config.animation_digits <= 0) {
+		return FALSE;
+	}
+	const CHAR16* path = config.animation_path ? config.animation_path : L"";
+	const CHAR16* prefix = config.animation_prefix ? config.animation_prefix : L"";
+	const CHAR16* ext = config.animation_ext ? config.animation_ext : L"";
+
+	UINTN pos = 0;
+	for (UINTN i = 0; path[i]; ++i) {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = path[i];
+	}
+	if (pos && out[pos - 1] != L'\\' && out[pos - 1] != L'/') {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = L'\\';
+	}
+	for (UINTN i = 0; prefix[i]; ++i) {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = prefix[i];
+	}
+
+	UINT32 tmp = frame;
+	for (int i = config.animation_digits - 1; i >= 0; --i) {
+		if (pos + i + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos + i] = L'0' + (tmp % 10);
+		tmp /= 10;
+	}
+	if (tmp) {
+		return FALSE;
+	}
+	pos += config.animation_digits;
+
+	for (UINTN i = 0; ext[i]; ++i) {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = ext[i];
+	}
+	out[pos] = 0;
+	return TRUE;
+}
+
+/**
+ * Load a BMP for animation. Returns 0 on any error.
+ */
+static BMP* LoadAnimationBMP(EFI_FILE_HANDLE base_dir, const CHAR16* path) {
+	UINTN size = 0;
+	BMP* bmp = LoadFile(base_dir, path, &size);
+	if (!bmp) {
+		return 0;
+	}
+	UINT32 row_size = 0;
+	INT32 width = 0;
+	INT32 height = 0;
+	BOOLEAN top_down = FALSE;
+	if (!ValidateBMPData(bmp, size, &row_size, &width, &height, &top_down)) {
+		BS->FreePool(bmp);
+		return 0;
+	}
+	return bmp;
+}
+
+struct AnimationBltFrame {
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL* blt;
+	UINT32 width;
+	UINT32 height;
+	UINTN blt_bytes;
+};
+
+static BOOLEAN DecodeBMPToBltFrame(BMP* bmp, struct AnimationBltFrame* out) {
+	if (!bmp || !out) {
+		return FALSE;
+	}
+	UINT32 row_size = 0;
+	INT32 width = 0;
+	INT32 height = 0;
+	BOOLEAN top_down = FALSE;
+	if (!ValidateBMPData(bmp, bmp->file_size, &row_size, &width, &height, &top_down)) {
+		return FALSE;
+	}
+	const UINTN pixel_count = (UINTN) width * (UINTN) height;
+	const UINTN blt_bytes = pixel_count * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL);
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL* blt = 0;
+	if (EFI_ERROR(BS->AllocatePool(EfiBootServicesData, blt_bytes, (void**)&blt))) {
+		return FALSE;
+	}
+	const UINT8* src_base = (const UINT8*) bmp + bmp->pixel_data_offset;
+	const UINTN src_bytes_per_pixel = bmp->bpp / 8;
+	for (INT32 y = 0; y < height; ++y) {
+		const INT32 src_y = top_down ? y : (height - 1 - y);
+		const UINT8* src_row = src_base + ((UINTN) src_y * row_size);
+		EFI_GRAPHICS_OUTPUT_BLT_PIXEL* dst_row = blt + ((UINTN) y * width);
+		for (INT32 x = 0; x < width; ++x) {
+			const UINT8* src = src_row + ((UINTN) x * src_bytes_per_pixel);
+			dst_row[x].Blue = src[0];
+			dst_row[x].Green = src[1];
+			dst_row[x].Red = src[2];
+			dst_row[x].Reserved = src_bytes_per_pixel == 4 ? src[3] : 0;
+		}
+	}
+	*out = (struct AnimationBltFrame) {
+		.blt = blt,
+		.width = (UINT32) width,
+		.height = (UINT32) height,
+		.blt_bytes = blt_bytes,
+	};
+	return TRUE;
+}
+
+static void FreeBltFrame(struct AnimationBltFrame* frame) {
+	if (frame && frame->blt) {
+		BS->FreePool(frame->blt);
+		frame->blt = 0;
+		frame->width = 0;
+		frame->height = 0;
+		frame->blt_bytes = 0;
+	}
+}
+
+static const CHAR16* GopPixelFormatName(EFI_GRAPHICS_PIXEL_FORMAT fmt) {
+	switch (fmt) {
+		case PixelBlueGreenRedReserved8BitPerColor: return L"PixelBlueGreenRedReserved8BitPerColor";
+		case PixelRedGreenBlueReserved8BitPerColor: return L"PixelRedGreenBlueReserved8BitPerColor";
+		case PixelBitMask: return L"PixelBitMask";
+		case PixelBltOnly: return L"PixelBltOnly";
+		default: return L"Unknown";
+	}
+}
+
+static BOOLEAN DrawBltFrame(EFI_GRAPHICS_OUTPUT_PROTOCOL* gop, const struct AnimationBltFrame* frame, int clear_each_frame) {
+	if (!gop || !gop->Mode || !gop->Mode->Info || !frame || !frame->blt || !frame->width || !frame->height) {
+		return FALSE;
+	}
+	const UINTN screen_w = gop->Mode->Info->HorizontalResolution;
+	const UINTN screen_h = gop->Mode->Info->VerticalResolution;
+	const UINTN draw_w = frame->width <= screen_w ? frame->width : screen_w;
+	const UINTN draw_h = frame->height <= screen_h ? frame->height : screen_h;
+	const UINTN src_x = frame->width > screen_w ? (frame->width - screen_w) / 2 : 0;
+	const UINTN src_y = frame->height > screen_h ? (frame->height - screen_h) / 2 : 0;
+	const UINTN dst_x = frame->width > screen_w ? 0 : (screen_w - frame->width) / 2;
+	const UINTN dst_y = frame->height > screen_h ? 0 : (screen_h - frame->height) / 2;
+
+	if (clear_each_frame) {
+		EFI_GRAPHICS_OUTPUT_BLT_PIXEL black = { 0, 0, 0, 0 };
+		if (EFI_ERROR(gop->Blt(gop, &black, EfiBltVideoFill, 0, 0, 0, 0, screen_w, screen_h, 0))) {
+			return FALSE;
+		}
+	}
+
+	// One Blt call per frame keeps rendering atomic and reduces tearing/artifacts.
+	const UINTN delta = frame->width * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL);
+	return !EFI_ERROR(gop->Blt(
+		gop,
+		frame->blt,
+		EfiBltBufferToVideo,
+		src_x, src_y,
+		dst_x, dst_y,
+		draw_w, draw_h,
+		delta
+	));
+}
+
+static UINT32 NowMilliseconds(void) {
+	EFI_TIME now;
+	if (EFI_ERROR(RT->GetTime(&now, 0))) {
+		return 0;
+	}
+	return (UINT32) now.Hour * 3600000U
+		+ (UINT32) now.Minute * 60000U
+		+ (UINT32) now.Second * 1000U
+		+ now.Nanosecond / 1000000U;
+}
+
+static int WaitUntilOrEsc(UINT32 target_ms) {
+	while (1) {
+		UINT32 now_ms = NowMilliseconds();
+		if (now_ms == 0 || now_ms >= target_ms) {
+			return 0;
+		}
+		UINT32 remain_ms = target_ms - now_ms;
+		UINT32 slice_ms = remain_ms;
+		if (slice_ms > 20) {
+			slice_ms = 20;
+		}
+		if (slice_ms == 0) {
+			slice_ms = 1;
+		}
+		if (config.animation_skip_esc) {
+			EFI_STATUS key_wait = WaitKey(slice_ms);
+			if (key_wait != EFI_TIMEOUT) {
+				EFI_INPUT_KEY key = {0};
+				ST->ConIn->ReadKeyStroke(ST->ConIn, &key);
+				if (key.ScanCode == SCAN_ESC) {
+					return 1;
+				}
+			}
+		} else {
+			BS->Stall(slice_ms * 1000);
+		}
+	}
+}
+
+static void CleanupPreloadedFrames(struct AnimationBltFrame* frames, UINTN count) {
+	if (!frames) {
+		return;
+	}
+	for (UINTN i = 0; i < count; ++i) {
+		FreeBltFrame(&frames[i]);
+	}
+	BS->FreePool(frames);
+}
+
+/**
+ * Play optional pre-boot animation and optionally return final frame for BGRT.
+ */
+static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
+	if (!config.animation) {
+		return 0;
+	}
+	EFI_GRAPHICS_OUTPUT_PROTOCOL* gop = GOP();
+	if (!gop || !gop->Mode || !gop->Mode->Info) {
+		Log(config.debug, L"Animation skipped: GOP unavailable.\n");
+		return 0;
+	}
+	if (config.animation_fps <= 0 || config.animation_max_ms <= 0 || config.animation_digits <= 0) {
+		Log(1, L"Animation skipped: invalid animation settings.\n");
+		return 0;
+	}
+
+	Log(config.debug, L"Animation GOP mode: %dx%d, format=%s.\n",
+		(int) gop->Mode->Info->HorizontalResolution,
+		(int) gop->Mode->Info->VerticalResolution,
+		GopPixelFormatName(gop->Mode->Info->PixelFormat)
+	);
+
+	const UINTN frame_ms = max(1, 1000 / config.animation_fps);
+	const UINTN max_frames = max(1, config.animation_max_ms / frame_ms);
+
+	UINT32 frame_space = 1;
+	for (int i = 0; i < config.animation_digits && frame_space <= 100000000; ++i) {
+		frame_space *= 10;
+	}
+
+	CHAR16 frame_path[512];
+	UINT32 start_index = 0;
+	BMP* probe = 0;
+	if (BuildAnimationFramePath(frame_path, 512, 0)) {
+		probe = LoadAnimationBMP(base_dir, frame_path);
+	}
+	if (!probe && BuildAnimationFramePath(frame_path, 512, 1)) {
+		probe = LoadAnimationBMP(base_dir, frame_path);
+		start_index = 1;
+	}
+	if (!probe) {
+		Log(config.debug, L"Animation skipped: no frame_000/frame_001 found.\n");
+		return 0;
+	}
+	BS->FreePool(probe);
+
+	struct AnimationBltFrame* preloaded = 0;
+	UINTN preloaded_count = 0;
+	BOOLEAN preload_enabled = config.animation_preload != 0;
+	UINTN preload_budget = (UINTN) max(1, config.animation_max_preload_mb) * 1024U * 1024U;
+	UINTN preload_used = 0;
+	UINTN detected_frames = 0;
+	UINTN detected_limit = frame_space > start_index ? frame_space - start_index : 1;
+	if (detected_limit > 10000) {
+		detected_limit = 10000;
+	}
+
+	if (preload_enabled) {
+		if (EFI_ERROR(BS->AllocatePool(EfiBootServicesData, detected_limit * sizeof(*preloaded), (void**)&preloaded))) {
+			preload_enabled = FALSE;
+			preloaded = 0;
+			Log(config.debug, L"Animation preload disabled: frame table allocation failed.\n");
+		} else {
+			BS->SetMem(preloaded, detected_limit * sizeof(*preloaded), 0);
+		}
+	}
+
+	for (UINTN n = 0; n < detected_limit; ++n) {
+		UINT32 frame_index = start_index + (UINT32) n;
+		if (!BuildAnimationFramePath(frame_path, 512, frame_index)) {
+			break;
+		}
+		BMP* bmp = LoadAnimationBMP(base_dir, frame_path);
+		if (!bmp) {
+			break;
+		}
+
+		UINT32 row_size = 0;
+		INT32 width = 0;
+		INT32 height = 0;
+		BOOLEAN top_down = FALSE;
+		if (!ValidateBMPData(bmp, bmp->file_size, &row_size, &width, &height, &top_down)) {
+			BS->FreePool(bmp);
+			break;
+		}
+		Log(config.debug, L"Animation frame %d: %dx%d, bpp=%d, row=%d, bytes=%d.\n",
+			(int) frame_index, width, height, (int) bmp->bpp, (int) row_size, (int) (row_size * height));
+
+		if (preload_enabled) {
+			struct AnimationBltFrame decoded = {0};
+			if (!DecodeBMPToBltFrame(bmp, &decoded)) {
+				Log(config.debug, L"Animation preload stopped: decode failed at frame %d.\n", (int) frame_index);
+				preload_enabled = FALSE;
+				CleanupPreloadedFrames(preloaded, preloaded_count);
+				preloaded = 0;
+				preloaded_count = 0;
+			} else if (preload_used + decoded.blt_bytes > preload_budget) {
+				Log(config.debug, L"Animation preload stopped: memory cap hit at frame %d.\n", (int) frame_index);
+				FreeBltFrame(&decoded);
+				preload_enabled = FALSE;
+				CleanupPreloadedFrames(preloaded, preloaded_count);
+				preloaded = 0;
+				preloaded_count = 0;
+			} else {
+				preloaded[preloaded_count++] = decoded;
+				preload_used += decoded.blt_bytes;
+			}
+		}
+
+		BS->FreePool(bmp);
+		++detected_frames;
+	}
+
+	if (detected_frames == 0) {
+		if (preloaded) {
+			CleanupPreloadedFrames(preloaded, preloaded_count);
+		}
+		Log(config.debug, L"Animation skipped: no valid animation frames.\n");
+		return 0;
+	}
+
+	Log(config.debug, L"Animation detected frame count=%d, preload=%d, preload_mb=%d.\n",
+		(int) detected_frames, preloaded ? 1 : 0, (int) (preload_used >> 20));
+
+	UINTN played = 0;
+	UINTN frame_slot = 0;
+	UINT32 last_index_played = start_index;
+	UINT32 timeline_start = NowMilliseconds();
+	UINT32 render_time_sum_ms = 0;
+	int failed = 0;
+
+	while (played < max_frames) {
+		UINTN logical_slot = frame_slot % detected_frames;
+		UINT32 current_index = start_index + (UINT32) logical_slot;
+		struct AnimationBltFrame frame = {0};
+		int frame_needs_free = 0;
+		UINT32 render_start = NowMilliseconds();
+
+		if (preloaded) {
+			frame = preloaded[logical_slot];
+		} else {
+			if (!BuildAnimationFramePath(frame_path, 512, current_index)) {
+				failed = 1;
+				break;
+			}
+			BMP* bmp = LoadAnimationBMP(base_dir, frame_path);
+			if (!bmp || !DecodeBMPToBltFrame(bmp, &frame)) {
+				if (bmp) {
+					BS->FreePool(bmp);
+				}
+				failed = 1;
+				break;
+			}
+			frame_needs_free = 1;
+			BS->FreePool(bmp);
+		}
+
+		if (frame.width > gop->Mode->Info->HorizontalResolution || frame.height > gop->Mode->Info->VerticalResolution) {
+			Log(config.debug, L"Animation frame %d larger than GOP screen, clamping (%dx%d -> %dx%d).\n",
+				(int) current_index, (int) frame.width, (int) frame.height,
+				(int) gop->Mode->Info->HorizontalResolution, (int) gop->Mode->Info->VerticalResolution);
+		}
+
+		if (!DrawBltFrame(gop, &frame, config.animation_clear_each_frame)) {
+			if (frame_needs_free) {
+				FreeBltFrame(&frame);
+			}
+			failed = 1;
+			break;
+		}
+		last_index_played = current_index;
+
+		UINT32 render_end = NowMilliseconds();
+		if (render_start && render_end && render_end >= render_start) {
+			render_time_sum_ms += render_end - render_start;
+		}
+		if (frame_needs_free) {
+			FreeBltFrame(&frame);
+		}
+
+		++played;
+		++frame_slot;
+
+		UINT32 now_ms = NowMilliseconds();
+		UINT32 target_ms = now_ms;
+		if (timeline_start && frame_ms > 0 && played <= (0xffffffffU - timeline_start) / frame_ms) {
+			target_ms = timeline_start + (UINT32) (played * frame_ms);
+		}
+		if (config.animation_skip_esc && WaitUntilOrEsc(target_ms)) {
+			break;
+		}
+		if (!config.animation_skip_esc) {
+			WaitUntilOrEsc(target_ms);
+		}
+
+		if (config.animation_allow_frame_skip && timeline_start) {
+			UINT32 behind_ms = NowMilliseconds();
+			if (behind_ms > timeline_start && frame_ms) {
+				UINT32 should_have_played = (behind_ms - timeline_start) / frame_ms;
+				if (should_have_played > played + 1) {
+					UINTN new_played = should_have_played > max_frames ? max_frames : (UINTN) should_have_played;
+					if (new_played > played) {
+						frame_slot += new_played - played;
+						played = new_played;
+					}
+				}
+			}
+		}
+	}
+
+	if (played > 0) {
+		Log(config.debug, L"Animation average frame render time: %d ms.\n", (int) (render_time_sum_ms / played));
+	}
+	if (preloaded) {
+		CleanupPreloadedFrames(preloaded, preloaded_count);
+	}
+
+	if (!config.animation_final_last || failed) {
+		return 0;
+	}
+	if (!BuildAnimationFramePath(frame_path, 512, last_index_played)) {
+		return 0;
+	}
+	BMP* final_frame = LoadAnimationBMP(base_dir, frame_path);
+	if (!final_frame) {
+		return 0;
+	}
+	INT32 width = 0;
+	INT32 height = 0;
+	BOOLEAN top_down = FALSE;
+	if (!ParseBMPGeometry(final_frame, &width, &height, &top_down) || top_down) {
+		BS->FreePool(final_frame);
+		return 0;
+	}
+	return final_frame;
+}
+
+/**
  * The main logic for BGRT modification.
  *
  * @param base_dir The directory for loading a BMP.
+ * @param final_animation_bmp The final animation frame to use for BGRT (or 0).
  */
-void HackBgrt(EFI_FILE_HANDLE base_dir) {
+void HackBgrt(EFI_FILE_HANDLE base_dir, BMP* final_animation_bmp) {
 	// REMOVE: simply delete all BGRT entries.
 	if (config.image.action == HackBGRT_ACTION_REMOVE) {
+		if (final_animation_bmp) {
+			BS->FreePool(final_animation_bmp);
+		}
 		HandleAcpiTables(config.image.action, 0);
 		return;
 	}
@@ -351,7 +877,9 @@ void HackBgrt(EFI_FILE_HANDLE base_dir) {
 	// Get the image (either old or new).
 	BMP* new_bmp = old_bmp;
 	if (config.image.action == HackBGRT_ACTION_REPLACE) {
-		new_bmp = LoadBMP(base_dir, config.image.path);
+		new_bmp = final_animation_bmp ? final_animation_bmp : LoadBMP(base_dir, config.image.path);
+	} else if (final_animation_bmp) {
+		BS->FreePool(final_animation_bmp);
 	}
 
 	// No image = no need for BGRT.
@@ -496,7 +1024,8 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *ST_) {
 	}
 
 	SetResolution(config.resolution_x, config.resolution_y);
-	HackBgrt(base_dir);
+	BMP* final_animation_bmp = PlayAnimation(base_dir);
+	HackBgrt(base_dir, final_animation_bmp);
 
 	EFI_HANDLE next_image_handle = 0;
 	static CHAR16 backup_boot_path[] = L"\\EFI\\HackBGRT\\bootmgfw-original.efi";

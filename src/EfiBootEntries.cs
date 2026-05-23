@@ -177,6 +177,28 @@ public class EfiBootEntries {
 	}
 
 	/**
+	 * Get an entry by file path.
+	 */
+	public (UInt16, Efi.Variable, BootEntryData) EntryByPath(string fileName) {
+		return FindEntry(fileName);
+	}
+
+	/**
+	 * Find entry by label.
+	 */
+	public (UInt16, Efi.Variable, BootEntryData) FindEntryByLabel(string label) {
+		var rest = Enumerable.Range(0, 0xff).Select(i => (UInt16)i);
+		var entryAccessOrder = BootCurrentInts.Concat(BootOrderInts).Concat(rest);
+		foreach (var num in entryAccessOrder) {
+			var (v, e) = GetEntry(num);
+			if (e != null && String.Equals(e.Label, label, StringComparison.OrdinalIgnoreCase)) {
+				return (num, v, e);
+			}
+		}
+		return (0xffff, null, null);
+	}
+
+	/**
 	 * Get a free boot entry.
 	 */
 	public (UInt16, Efi.Variable, BootEntryData) FreeEntry {
@@ -187,7 +209,14 @@ public class EfiBootEntries {
 	 * Check if the own entry is enabled.
 	 */
 	public OwnEntryStatus GetOwnEntryStatus() {
-		var (ownNum, ownVar, _) = OwnEntry;
+		return GetEntryStatus(OwnLoaderPath);
+	}
+
+	/**
+	 * Check if a given entry path is enabled.
+	 */
+	public OwnEntryStatus GetEntryStatus(string fileName) {
+		var (ownNum, ownVar, _) = FindEntry(fileName);
 		if (ownVar == null) {
 			return OwnEntryStatus.NotFound;
 		}
@@ -204,15 +233,42 @@ public class EfiBootEntries {
 	}
 
 	/**
+	 * List known entries (for display / diagnostics).
+	 */
+	public IEnumerable<(UInt16 Number, string Label, string FileName)> EnumerateKnownEntries() {
+		var seen = new HashSet<UInt16>();
+		foreach (var num in BootOrderInts.Concat(BootCurrentInts).Concat(Enumerable.Range(0, 0xff).Select(i => (UInt16) i))) {
+			if (!seen.Add(num)) {
+				continue;
+			}
+			var (_, e) = GetEntry(num);
+			if (e != null) {
+				yield return (num, e.Label, e.FileName);
+			}
+		}
+	}
+
+	/**
 	 * Disable the said boot entry from BootOrder.
 	 *
 	 * @param dryRun Don't actually write to NVRAM.
 	 * @return True, if the entry was found in BootOrder.
 	 */
 	public bool DisableOwnEntry(bool dryRun = false) {
-		var (ownNum, ownVar, _) = OwnEntry;
+		return DisableEntry(OwnLoaderPath, dryRun);
+	}
+
+	/**
+	 * Disable a boot entry from BootOrder by file path.
+	 *
+	 * @param fileName File path of the entry.
+	 * @param dryRun Don't actually write to NVRAM.
+	 * @return True, if the entry was found in BootOrder.
+	 */
+	public bool DisableEntry(string fileName, bool dryRun = false) {
+		var (ownNum, ownVar, _) = FindEntry(fileName);
 		if (ownVar == null) {
-			Setup.Log("Own entry not found.");
+			Setup.Log($"Entry not found for path {fileName}.");
 			return false;
 		}
 		Setup.Log($"Old boot order: {BootOrder}");
@@ -235,16 +291,28 @@ public class EfiBootEntries {
 	 * @param dryRun Don't actually write to NVRAM.
 	 */
 	public void MakeOwnEntry(bool alwaysCopyFromMS, bool dryRun = false) {
+		MakeEntry(OwnLoaderPath, "HackBGRT", alwaysCopyFromMS, dryRun);
+	}
+
+	/**
+	 * Create or update the boot entry for a given path.
+	 *
+	 * @param fileName EFI file path for this entry.
+	 * @param label Label of the entry.
+	 * @param alwaysCopyFromMS If true, do not preserve existing data.
+	 * @param dryRun Don't actually write to NVRAM.
+	 */
+	public void MakeEntry(string fileName, string label, bool alwaysCopyFromMS, bool dryRun = false) {
 		var (msNum, msVar, msEntry) = WindowsEntry;
-		var (ownNum, ownVar, ownEntry) = OwnEntry;
+		var (ownNum, ownVar, ownEntry) = FindEntry(fileName);
 		if (ownVar == null) {
 			(ownNum, ownVar, ownEntry) = FreeEntry;
 			if (ownVar == null) {
-				throw new Exception("MakeOwnEntry: No free entry.");
+				throw new Exception("MakeEntry: No free entry.");
 			}
-			Setup.Log($"Creating own entry {ownNum:X4}.");
+			Setup.Log($"Creating entry {ownNum:X4} for path {fileName}.");
 		} else {
-			Setup.Log($"Updating own entry {ownNum:X4}.");
+			Setup.Log($"Updating entry {ownNum:X4} for path {fileName}.");
 		}
 
 		Setup.Log($"Read EFI variable: {msVar}");
@@ -264,12 +332,12 @@ public class EfiBootEntries {
 			}
 		} else {
 			if (msEntry == null) {
-				throw new Exception("MakeOwnEntry: Windows Boot Manager not found.");
+				throw new Exception("MakeEntry: Windows Boot Manager not found.");
 			}
 			ownEntry = msEntry;
 			ownEntry.Arguments = new byte[0];
-			ownEntry.Label = "HackBGRT";
-			ownEntry.FileName = OwnLoaderPath;
+			ownEntry.Label = label;
+			ownEntry.FileName = fileName;
 		}
 		ownEntry.Attributes = 1; // LOAD_OPTION_ACTIVE
 		ownVar.Attributes = 7; // EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS
@@ -283,26 +351,111 @@ public class EfiBootEntries {
 	 * @param dryRun Don't actually write to NVRAM.
 	 */
 	public void EnableOwnEntry(bool dryRun = false) {
-		var (ownNum, ownVar, _) = OwnEntry;
+		EnableEntry(OwnLoaderPath, dryRun, true);
+	}
+
+	/**
+	 * Enable a boot entry and optionally make it default.
+	 *
+	 * @param fileName EFI file path for this entry.
+	 * @param dryRun Don't actually write to NVRAM.
+	 * @param makeDefault True = move before Windows; False = only ensure it's present (after Windows).
+	 */
+	public void EnableEntry(string fileName, bool dryRun = false, bool makeDefault = true) {
+		var (ownNum, ownVar, _) = FindEntry(fileName);
 		if (ownVar == null) {
-			Setup.Log("Own entry not found.");
+			Setup.Log($"Entry not found for path {fileName}.");
 			return;
 		}
 		var (msNum, _, _) = WindowsEntry;
 		var msPos = BootOrderInts.IndexOf(msNum);
 		var ownPos = BootOrderInts.IndexOf(ownNum);
-		var mustAdd = ownPos == -1;
-		var mustMove = 0 <= msPos && msPos <= ownPos;
 		Setup.Log($"Old boot order: {BootOrder}");
-		if (mustAdd || mustMove) {
-			Setup.Log($"Enabling own entry: {ownNum:X04}");
-			if (mustMove) {
-				BootOrderInts.RemoveAt(ownPos);
+
+		if (makeDefault) {
+			var mustAdd = ownPos == -1;
+			var mustMove = 0 <= msPos && msPos <= ownPos;
+			if (mustAdd || mustMove) {
+				Setup.Log($"Enabling entry as default: {ownNum:X04}");
+				if (mustMove) {
+					BootOrderInts.RemoveAt(ownPos);
+				}
+				BootOrderInts.Insert(msPos < 0 ? 0 : msPos, ownNum);
+				BootOrder.Data = BootOrderInts.SelectMany(num => new byte[] { (byte)(num & 0xff), (byte)(num >> 8) }).ToArray();
+				Efi.SetVariable(BootOrder, dryRun);
 			}
-			BootOrderInts.Insert(msPos < 0 ? 0 : msPos, ownNum);
-			BootOrder.Data = BootOrderInts.SelectMany(num => new byte[] { (byte)(num & 0xff), (byte)(num >> 8) }).ToArray();
-			Efi.SetVariable(BootOrder, dryRun);
+			return;
 		}
+
+		if (ownPos >= 0) {
+			Setup.Log($"Entry already present in BootOrder: {ownNum:X04}");
+			return;
+		}
+		Setup.Log($"Adding entry without making default: {ownNum:X04}");
+		var insertPos = msPos < 0 ? BootOrderInts.Count : msPos + 1;
+		BootOrderInts.Insert(insertPos, ownNum);
+		BootOrder.Data = BootOrderInts.SelectMany(num => new byte[] { (byte)(num & 0xff), (byte)(num >> 8) }).ToArray();
+		Efi.SetVariable(BootOrder, dryRun);
+	}
+
+	/**
+	 * Delete an entry variable by path.
+	 *
+	 * @param fileName EFI file path for this entry.
+	 * @param dryRun Don't actually write to NVRAM.
+	 * @return True if found and deleted.
+	 */
+	public bool DeleteEntry(string fileName, bool dryRun = false) {
+		var (num, entryVar, _) = FindEntry(fileName);
+		if (entryVar == null) {
+			Setup.Log($"No entry to delete for path {fileName}.");
+			return false;
+		}
+		Setup.Log($"Deleting entry Boot{num:X04} ({fileName}).");
+			DisableEntry(fileName, dryRun);
+			entryVar.Data = new byte[0];
+			Efi.SetVariable(entryVar, dryRun);
+			return true;
+		}
+
+	/**
+	 * Delete an entry by label if present.
+	 */
+	public bool DeleteEntryByLabel(string label, bool dryRun = false) {
+		var (num, entryVar, entryData) = FindEntryByLabel(label);
+		if (entryVar == null || entryData == null) {
+			return false;
+		}
+		Setup.Log($"Deleting entry Boot{num:X04} by label ({label}).");
+		DisableEntry(entryData.FileName, dryRun);
+		entryVar.Data = new byte[0];
+		Efi.SetVariable(entryVar, dryRun);
+		return true;
+	}
+
+	/**
+	 * Move an existing entry to the front of BootOrder.
+	 */
+	public void MakeEntryDefault(string fileName, bool dryRun = false) {
+		var (num, v, _) = FindEntry(fileName);
+		if (v == null) {
+			Setup.Log($"Entry not found for default operation: {fileName}");
+			return;
+		}
+		var pos = BootOrderInts.IndexOf(num);
+		if (pos >= 0) {
+			BootOrderInts.RemoveAt(pos);
+		}
+		BootOrderInts.Insert(0, num);
+		BootOrder.Data = BootOrderInts.SelectMany(n => new byte[] { (byte)(n & 0xff), (byte)(n >> 8) }).ToArray();
+		Efi.SetVariable(BootOrder, dryRun);
+	}
+
+	/**
+	 * Ensure an entry is present in BootOrder without moving it to first place.
+	 */
+	public void AddEntryWithoutDefault(string fileName, bool dryRun = false) {
+		EnableEntry(fileName, dryRun, false);
 	}
 
 	/**

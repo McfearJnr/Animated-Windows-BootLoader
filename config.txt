@@ -1,4 +1,4 @@
-﻿# vim: set fileencoding=utf-8
+# vim: set fileencoding=utf-8
 # Lines starting with '#' are comments.
 
 # Boot loader path. MS = either backup or original Windows boot loader.
@@ -34,6 +34,16 @@ boot=MS
 # Default: just one image.
 image= path=splash.bmp
 
+# Optional pre-boot animation shown before BGRT replacement.
+# Frame files are loaded as: animation_path + animation_prefix + zero-padded index + animation_ext
+# Example with defaults: \EFI\HackBGRT\animation\frame_000.bmp, frame_001.bmp, ...
+# animation_final:
+#  - "last" keeps the final shown frame as BGRT image.
+#  - "splash" keeps normal image=... behaviour after animation.
+# animation_skip_key:
+#  - "esc" allows Escape to skip animation.
+#  - "none" disables skip.
+
 # Preferred resolution. Use 0x0 for maximum and -1x-1 for original.
 resolution=0x0
 
@@ -45,3 +55,16 @@ log=1
 # Debug mode (0 for disabled, 1 for enabled).
 # Shows debug information and prompts for keypress before booting.
 debug=0
+animation=1
+animation_path=\EFI\HackBGRT\animation\
+animation_prefix=frame_
+animation_digits=3
+animation_ext=.bmp
+animation_fps=10
+animation_max_ms=7000
+animation_final=last
+animation_skip_key=esc
+animation_clear_each_frame=1
+animation_preload=1
+animation_max_preload_mb=64
+animation_allow_frame_skip=0

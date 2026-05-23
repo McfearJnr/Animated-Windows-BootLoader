@@ -12,6 +12,16 @@ FILES_C = src/main.c src/util.c src/types.c src/config.c src/sbat.c src/efi.c
 FILES_H = $(wildcard src/*.h)
 FILES_CS = src/Setup.cs src/Esp.cs src/Efi.cs src/EfiBootEntries.cs
 
+# C# compiler and source path handling:
+# - Windows csc.exe treats '/' in source paths badly, so pass backslash paths.
+# - Linux/macOS keep forward slash paths.
+CSC = csc
+FILES_CS_BUILD = $(FILES_CS)
+ifeq ($(OS),Windows_NT)
+CSC = C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/MSBuild/Current/Bin/Roslyn/csc.exe
+FILES_CS_BUILD = $(subst /,\,$(FILES_CS))
+endif
+
 # Generate version number from git describe.
 # In the numeric form, add the number of commits as the last part.
 # (Add .1 for uncommitted changes.)
@@ -62,7 +72,7 @@ src/GIT_DESCRIBE.cs: $(FILES_CS) $(FILES_C) $(FILES_H)
 	$(file > $@,$(GIT_DESCRIBE_CS))
 
 setup.exe: $(FILES_CS) src/GIT_DESCRIBE.cs
-	csc -nologo -define:GIT_DESCRIBE -out:$@ $^
+	$(CSC) -nologo -define:GIT_DESCRIBE -out:$@ $(FILES_CS_BUILD) src/GIT_DESCRIBE.cs
 
 certificate.cer pki:
 	@echo
