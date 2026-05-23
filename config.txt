@@ -55,16 +55,16 @@ log=1
 # Debug mode (0 for disabled, 1 for enabled).
 # Shows debug information and prompts for keypress before booting.
 debug=0
+animation_clear_each_frame=1
+animation_preload=1
+animation_max_preload_mb=64
+animation_allow_frame_skip=0
 animation=1
 animation_path=\EFI\HackBGRT\animation\
 animation_prefix=frame_
 animation_digits=3
 animation_ext=.bmp
 animation_fps=10
-animation_max_ms=7000
+animation_max_ms=5000
 animation_final=last
 animation_skip_key=esc
-animation_clear_each_frame=1
-animation_preload=1
-animation_max_preload_mb=64
-animation_allow_frame_skip=0

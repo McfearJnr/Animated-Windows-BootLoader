@@ -623,3 +623,292 @@
 2026-05-23 22:24:49.294 | pid 32436 |  - run this setup again with menu option L (show-boot-log)
 2026-05-23 22:24:49.294 | pid 32436 |  - then include the setup-log.txt file with your report.
 2026-05-23 22:24:49.294 | pid 32436 | Press any key to quit.
+2026-05-23 22:54:04.387 | pid 18372 | HackBGRT installer version: v2.6.0-1-dirty
+2026-05-23 22:54:04.390 | pid 18372 | Windows version: Microsoft Windows NT 6.2.9200.0
+2026-05-23 22:54:04.390 | pid 18372 | Args: 
+2026-05-23 22:54:04.393 | pid 18372 | Your OS uses arch=x64. This will be checked again during installation.
+2026-05-23 22:54:04.397 | pid 18372 | 
+2026-05-23 22:54:04.397 | pid 18372 | Choose action (press a key):
+2026-05-23 22:54:04.397 | pid 18372 |  I = install
+2026-05-23 22:54:04.397 | pid 18372 |      - creates a new EFI boot entry for HackBGRT
+2026-05-23 22:54:04.398 | pid 18372 |  J = install (alternative)
+2026-05-23 22:54:04.398 | pid 18372 |      - creates a new EFI boot entry with an alternative method
+2026-05-23 22:54:04.398 | pid 18372 |      - try this if the first option doesn't work
+2026-05-23 22:54:04.398 | pid 18372 |  O = install (legacy)
+2026-05-23 22:54:04.399 | pid 18372 |      - overwrites the MS boot loader; gets removed by Windows updates
+2026-05-23 22:54:04.399 | pid 18372 |      - use as last resort; may brick your system if configured incorrectly
+2026-05-23 22:54:04.399 | pid 18372 |  F = install files only
+2026-05-23 22:54:04.399 | pid 18372 |      - ok for updating config, doesn't touch boot entries
+2026-05-23 22:54:04.400 | pid 18372 |  T = install side-by-side test
+2026-05-23 22:54:04.400 | pid 18372 |      - installs to \EFI\HackBGRT-Animated\ by default
+2026-05-23 22:54:04.400 | pid 18372 |      - creates separate 'HackBGRT Animated Test' entry
+2026-05-23 22:54:04.400 | pid 18372 |      - does NOT change BootOrder by default
+2026-05-23 22:54:04.401 | pid 18372 |  Y = install side-by-side + add to boot order
+2026-05-23 22:54:04.401 | pid 18372 |      - creates separate test entry and adds it after Windows
+2026-05-23 22:54:04.401 | pid 18372 |  U = uninstall side-by-side test
+2026-05-23 22:54:04.401 | pid 18372 |      - removes only test entry/folder, keeps normal HackBGRT
+2026-05-23 22:54:04.402 | pid 18372 |  D = disable
+2026-05-23 22:54:04.402 | pid 18372 |      - removes created entries, restores MS boot loader
+2026-05-23 22:54:04.402 | pid 18372 |  R = remove completely
+2026-05-23 22:54:04.402 | pid 18372 |      - disables, then deletes all files and images
+2026-05-23 22:54:04.403 | pid 18372 |  B = boot to UEFI setup
+2026-05-23 22:54:04.403 | pid 18372 |      - lets you disable Secure Boot
+2026-05-23 22:54:04.403 | pid 18372 |      - lets you move HackBGRT before Windows in boot order
+2026-05-23 22:54:04.404 | pid 18372 |  L = show boot log (what HackBGRT did during boot)
+2026-05-23 22:54:04.408 | pid 18372 |  C = cancel
+2026-05-23 22:54:06.756 | pid 18372 | User input: T
+2026-05-23 22:54:06.757 | pid 18372 | 
+2026-05-23 22:54:06.757 | pid 18372 | This setup program lets you edit just one image.
+2026-05-23 22:54:06.758 | pid 18372 | Edit config.txt manually for advanced configuration.
+2026-05-23 22:54:06.758 | pid 18372 | Draw or copy your preferred image to splash.bmp.
+2026-05-23 22:54:06.759 | pid 18372 | StartProcess: mspaint splash.bmp
+2026-05-23 22:54:09.628 | pid 18372 | 
+2026-05-23 22:54:09.635 | pid 18372 | Import animated GIF for pre-boot animation? [y/N]
+2026-05-23 22:54:12.337 | pid 18372 | Enter GIF file path:
+2026-05-23 22:55:13.201 | pid 18372 | Animation FPS (1-120) [30]
+2026-05-23 22:55:14.882 | pid 18372 | Animation max duration in ms (2000-7000) [3000]
+2026-05-23 22:55:18.369 | pid 18372 | Output frame size WxH [400x400]
+2026-05-23 22:55:21.139 | pid 18372 | Background color in RRGGBB [000000]
+2026-05-23 22:55:22.488 | pid 18372 | GIF import prepared: source frames=75, output frames=50, size=226x400.
+2026-05-23 22:55:22.489 | pid 18372 | Estimated animation BMP size: ~13283 KiB.
+2026-05-23 22:55:22.489 | pid 18372 | Local staged frames are in C:\Users\archi\Documents\GitHub\HackBGRT\animation.
+2026-05-23 22:55:22.490 | pid 18372 | Preview extracted frames now? [Y/n]
+2026-05-23 22:55:24.784 | pid 18372 | Previewing extracted frames.
+2026-05-23 22:55:24.784 | pid 18372 | StartProcess: explorer "C:\Users\archi\Documents\GitHub\HackBGRT\animation-preview"
+2026-05-23 22:55:24.799 | pid 18372 | StartProcess: mspaint "animation-preview\frame_001.bmp"
+2026-05-23 22:55:24.803 | pid 18372 | Use this animation for installation? [Y/n]
+2026-05-23 22:55:43.276 | pid 18372 | Enabled animation mode in config.txt.
+2026-05-23 22:55:43.277 | pid 18372 | RunPrivilegedActions: install-side-by-side
+2026-05-23 22:55:43.278 | pid 18372 | RunElevated: C:\Users\archi\Documents\GitHub\HackBGRT\setup.exe is-elevated  install-side-by-side
+2026-05-23 22:55:45.525 | pid 36784 | HackBGRT installer version: v2.6.0-1-dirty
+2026-05-23 22:55:45.529 | pid 36784 | Windows version: Microsoft Windows NT 6.2.9200.0
+2026-05-23 22:55:45.529 | pid 36784 | Args: is-elevated install-side-by-side
+2026-05-23 22:55:45.533 | pid 36784 | Your OS uses arch=x64. This will be checked again during installation.
+2026-05-23 22:55:45.535 | pid 36784 | RunPrivilegedActions: install-side-by-side
+2026-05-23 22:55:45.536 | pid 36784 | Esp: Detect from mountvol output.
+2026-05-23 22:55:45.536 | pid 36784 | Execute: mountvol 
+2026-05-23 22:55:45.544 | pid 36784 | Exit code: 0, output:
+2026-05-23 22:55:45.544 | pid 36784 | Creates, deletes, or lists a volume mount point.
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL [drive:]path VolumeName
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL [drive:]path /D
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL [drive:]path /L
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL [drive:]path /P
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL /R
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL /N
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL /E
+2026-05-23 22:55:45.544 | pid 36784 | MOUNTVOL drive: /S
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     path        Specifies the existing NTFS directory where the mount
+2026-05-23 22:55:45.544 | pid 36784 |                 point will reside.
+2026-05-23 22:55:45.544 | pid 36784 |     VolumeName  Specifies the volume name that is the target of the mount
+2026-05-23 22:55:45.544 | pid 36784 |                 point.
+2026-05-23 22:55:45.544 | pid 36784 |     /D          Removes the volume mount point from the specified directory.
+2026-05-23 22:55:45.544 | pid 36784 |     /L          Lists the mounted volume name for the specified directory.
+2026-05-23 22:55:45.544 | pid 36784 |     /P          Removes the volume mount point from the specified directory,
+2026-05-23 22:55:45.544 | pid 36784 |                 dismounts the volume, and makes the volume not mountable.
+2026-05-23 22:55:45.544 | pid 36784 |                 You can make the volume mountable again by creating a volume
+2026-05-23 22:55:45.544 | pid 36784 |                 mount point.
+2026-05-23 22:55:45.544 | pid 36784 |     /R          Removes volume mount point directories and registry settings
+2026-05-23 22:55:45.544 | pid 36784 |                 for volumes that are no longer in the system.
+2026-05-23 22:55:45.544 | pid 36784 |     /N          Disables automatic mounting of new volumes.
+2026-05-23 22:55:45.544 | pid 36784 |     /E          Re-enables automatic mounting of new volumes.
+2026-05-23 22:55:45.544 | pid 36784 |     /S          Mount the EFI System Partition on the given drive.
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 | Possible values for VolumeName along with current mount points are:
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{8f8d5d16-a5dc-4b06-92ea-594542ee6b9c}\
+2026-05-23 22:55:45.544 | pid 36784 |         *** NO MOUNT POINTS ***
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{568d03ce-ce23-456e-a636-70291bb05ab8}\
+2026-05-23 22:55:45.544 | pid 36784 |         C:\
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{a7ddcdcd-9682-4696-a502-701ed5b90225}\
+2026-05-23 22:55:45.544 | pid 36784 |         *** NO MOUNT POINTS ***
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{2f106af1-0000-0000-0000-100000000000}\
+2026-05-23 22:55:45.544 | pid 36784 |         E:\
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{629458e4-0000-0000-0000-010000000000}\
+2026-05-23 22:55:45.544 | pid 36784 |         C:\ProgramData\Microsoft\Windows\Containers\BaseImages\a25c7643-a9d7-476c-a015-995a80a344aa\BaseLayer\
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 |     \\?\Volume{38c1361a-c557-4c84-a422-73b084df8e91}\
+2026-05-23 22:55:45.544 | pid 36784 |         *** NO MOUNT POINTS ***
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.544 | pid 36784 | 
+2026-05-23 22:55:45.545 | pid 36784 | Esp: no match
+2026-05-23 22:55:45.546 | pid 36784 | Esp: Try to mount with mountvol.
+2026-05-23 22:55:45.546 | pid 36784 | Esp.Mount: A
+2026-05-23 22:55:45.546 | pid 36784 | Execute: mountvol A: /S
+2026-05-23 22:55:45.551 | pid 36784 | Exit code: 0, output:
+2026-05-23 22:55:45.551 | pid 36784 | 
+2026-05-23 22:55:45.551 | pid 36784 | 
+2026-05-23 22:55:45.551 | pid 36784 | 
+2026-05-23 22:55:45.552 | pid 36784 | Esp.TryPath: A:\ has MS boot loader
+2026-05-23 22:55:45.552 | pid 36784 | EFI System Partition location is A:\
+2026-05-23 22:55:45.566 | pid 36784 | Detected arch=x64 from MS boot loader, the installer will use that.
+2026-05-23 22:55:45.569 | pid 36784 | 
+2026-05-23 22:55:45.569 | pid 36784 | --- BOOT LOG START ---
+2026-05-23 22:55:45.569 | pid 36784 | HackBGRT version: v2.6.0-1-dirty
+2026-05-23 22:55:45.569 | pid 36784 | Default directory: \EFI\HackBGRT
+2026-05-23 22:55:45.569 | pid 36784 | Working directory: \EFI\HackBGRT-Animated
+2026-05-23 22:55:45.569 | pid 36784 | image n=1, action=1, x=5000 (mode 2), y=3820 (mode 2), o=-1, path=splash.bmp, rand=0/0, chosen=1
+2026-05-23 22:55:45.569 | pid 36784 | Looking for resolution 999999x999999...
+2026-05-23 22:55:45.569 | pid 36784 | Found resolution 2560x1440.
+2026-05-23 22:55:45.569 | pid 36784 | RSDP @708ff014: revision = 2, OEM ID = ALASKA
+2026-05-23 22:55:45.569 | pid 36784 | * XSDT @708fe728: OEM ID = ALASKA, entry count = 30
+2026-05-23 22:55:45.569 | pid 36784 |  - ACPI table @708e7000: BGRT, revision = 1, OEM ID = ALASKA
+2026-05-23 22:55:45.569 | pid 36784 |  -> Returning this one for later use.
+2026-05-23 22:55:45.569 | pid 36784 | Screen 2560x1440, BMP 226x400, center (0, -169) = corner (1167, 351), orientation 0.
+2026-05-23 22:55:45.569 | pid 36784 | RSDP @708ff014: revision = 2, OEM ID = ALASKA
+2026-05-23 22:55:45.569 | pid 36784 | * XSDT @708fe728: OEM ID = ALASKA, entry count = 30
+2026-05-23 22:55:45.569 | pid 36784 |  - ACPI table @708e7000: BGRT, revision = 1, OEM ID = Mtblx*
+2026-05-23 22:55:45.569 | pid 36784 |  -> Replacing.
+2026-05-23 22:55:45.569 | pid 36784 | Loading application \EFI\HackBGRT\bootmgfw-original.efi.
+2026-05-23 22:55:45.569 | pid 36784 | Failed to load application \EFI\HackBGRT\bootmgfw-original.efi.
+2026-05-23 22:55:45.569 | pid 36784 | Loading application \EFI\Microsoft\Boot\bootmgfw.efi.
+2026-05-23 22:55:45.569 | pid 36784 | 
+2026-05-23 22:55:45.569 | pid 36784 | --- BOOT LOG END ---
+2026-05-23 22:55:45.570 | pid 36784 | LogBGRT: 56 bytes: 42 47 52 54 38 00 00 00 01 82 4D 74 62 6C 78 2A 48 61 63 6B 42 47 52 54 01 00 00 00 4E 6F 6E 65 01 00 00 00 01 00 00 00 18 20 1F 62 00 00 00 00 8F 04 00 00 5F 01 00 00
+2026-05-23 22:55:45.573 | pid 36784 | LogEntries: BootOrder Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='      ' Bytes='05 00 00 00 01 00'
+2026-05-23 22:55:45.573 | pid 36784 | LogEntries: BootCurrent Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=6 Text='  ' Bytes='05 00'
+2026-05-23 22:55:45.582 | pid 36784 | LogEntries: Boot0005 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    x H a c k B G R T   A n i m a t e d   T e s t     *                      6 8W  L "s         J \ E F I \ H a c k B G R T - A n i m a t e d \ b o o t x 6 4 . e f i      ' Bytes='01 00 00 00 78 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 20 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 20 00 54 00 65 00 73 00 74 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 4A 00 5C 00 45 00 46 00 49 00 5C 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 2D 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 5C 00 62 00 6F 00 6F 00 74 00 78 00 36 00 34 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00'
+2026-05-23 22:55:45.582 | pid 36784 | LogEntries: Boot0000 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    t W i n d o w s   B o o t   M a n a g e r     *                      6 8W  L "s         F \ E F I \ M i c r o s o f t \ B o o t \ b o o t m g f w . e f i      WINDOWS         x   B C D O B J E C T = { 9 d e a 8 6 2 c - 5 c d d - 4 e 7 0 - a c c 1 - f 3 2 b 3 4 4 d 4 7 9 5 }                    ' Bytes='01 00 00 00 74 00 57 00 69 00 6E 00 64 00 6F 00 77 00 73 00 20 00 42 00 6F 00 6F 00 74 00 20 00 4D 00 61 00 6E 00 61 00 67 00 65 00 72 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 46 00 5C 00 45 00 46 00 49 00 5C 00 4D 00 69 00 63 00 72 00 6F 00 73 00 6F 00 66 00 74 00 5C 00 42 00 6F 00 6F 00 74 00 5C 00 62 00 6F 00 6F 00 74 00 6D 00 67 00 66 00 77 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00 57 49 4E 44 4F 57 53 00 01 00 00 00 88 00 00 00 78 00 00 00 42 00 43 00 44 00 4F 00 42 00 4A 00 45 00 43 00 54 00 3D 00 7B 00 39 00 64 00 65 00 61 00 38 00 36 00 32 00 63 00 2D 00 35 00 63 00 64 00 64 00 2D 00 34 00 65 00 37 00 30 00 2D 00 61 00 63 00 63 00 31 00 2D 00 66 00 33 00 32 00 62 00 33 00 34 00 34 00 64 00 34 00 37 00 39 00 35 00 7D 00 00 00 12 00 01 00 00 00 10 00 00 00 04 00 00 00 7F FF 04 00'
+2026-05-23 22:55:45.582 | pid 36784 | LogEntries: Boot0001 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    d H a c k B G R T     *                      6 8W  L "s         6 \ E F I \ H a c k B G R T \ l o a d e r . e f i      WINDOWS X       x   B C D O B J E C T = { 4 b 6 3 7 b 8 b - c 6 d 9 - 1 1 f 0 - b 0 c e - a 0 a d 9 f 5 9 4 e e b }                    ' Bytes='01 00 00 00 64 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 36 00 5C 00 45 00 46 00 49 00 5C 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 5C 00 6C 00 6F 00 61 00 64 00 65 00 72 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00 57 49 4E 44 4F 57 53 00 58 00 00 00 88 00 00 00 78 00 00 00 42 00 43 00 44 00 4F 00 42 00 4A 00 45 00 43 00 54 00 3D 00 7B 00 34 00 62 00 36 00 33 00 37 00 62 00 38 00 62 00 2D 00 63 00 36 00 64 00 39 00 2D 00 31 00 31 00 66 00 30 00 2D 00 62 00 30 00 63 00 65 00 2D 00 61 00 30 00 61 00 64 00 39 00 66 00 35 00 39 00 34 00 65 00 65 00 62 00 7D 00 00 00 12 00 01 00 00 00 10 00 00 00 04 00 00 00 7F FF 04 00'
+2026-05-23 22:55:45.591 | pid 36784 | HackBGRT boot entry is disabled (after Windows in BootOrder).
+2026-05-23 22:55:45.614 | pid 36784 | Boot time = 23/05/2026 22:32:39, config.txt changed = 23/05/2026 22:55:43
+2026-05-23 22:55:45.614 | pid 36784 | Windows was booted at 23/05/2026 22:32:39. Remember to reboot after installing!
+2026-05-23 22:55:45.615 | pid 36784 | You may have to disable Fast Startup (Hiberboot) to reboot properly.
+2026-05-23 22:55:45.615 | pid 36784 | Running action 'install-side-by-side'.
+2026-05-23 22:55:45.616 | pid 36784 | Detected arch=x64 from MS boot loader, the installer will use that.
+2026-05-23 22:55:45.618 | pid 36784 | Current firmware boot entries:
+2026-05-23 22:55:45.628 | pid 36784 |  Boot0000: Windows Boot Manager -> \EFI\Microsoft\Boot\bootmgfw.efi
+2026-05-23 22:55:45.629 | pid 36784 |  Boot0001: HackBGRT -> \EFI\HackBGRT\loader.efi
+2026-05-23 22:55:45.629 | pid 36784 |  Boot0005: HackBGRT Animated Test -> \EFI\HackBGRT-Animated\bootx64.efi
+2026-05-23 22:55:45.629 | pid 36784 | 
+2026-05-23 22:55:45.630 | pid 36784 | Side-by-side mode dry-run summary:
+2026-05-23 22:55:45.630 | pid 36784 |  install_mode=normal
+2026-05-23 22:55:45.630 | pid 36784 |  target_efi_folder=\EFI\HackBGRT-Animated\
+2026-05-23 22:55:45.630 | pid 36784 |  boot_entry_path=\EFI\HackBGRT-Animated\bootx64.efi
+2026-05-23 22:55:45.630 | pid 36784 |  boot_entry_name=HackBGRT Animated Test
+2026-05-23 22:55:45.630 | pid 36784 |  side_by_side_make_default=0
+2026-05-23 22:55:45.631 | pid 36784 |  side_by_side_add_to_boot_order=0
+2026-05-23 22:55:45.631 | pid 36784 |  boot_order_will_change=no
+2026-05-23 22:55:45.631 | pid 36784 |  detected_windows_boot_manager=yes (Boot0000)
+2026-05-23 22:55:45.631 | pid 36784 |  detected_existing_hackbgrt_folder=yes: A:\EFI\HackBGRT
+2026-05-23 22:55:45.631 | pid 36784 |  detected_existing_hackbgrt_entry=yes path=\EFI\HackBGRT\loader.efi
+2026-05-23 22:55:45.631 | pid 36784 |  detected_existing_animated_folder=yes: A:\EFI\HackBGRT-Animated
+2026-05-23 22:55:45.631 | pid 36784 |  detected_existing_animated_entry=yes path=\EFI\HackBGRT-Animated\bootx64.efi
+2026-05-23 22:55:45.631 | pid 36784 |  files_to_copy:
+2026-05-23 22:55:45.632 | pid 36784 |   - config.txt -> \EFI\HackBGRT-Animated\config.txt
+2026-05-23 22:55:45.632 | pid 36784 |   - splash.bmp + image files referenced by config
+2026-05-23 22:55:45.632 | pid 36784 |   - bootx64.efi -> \EFI\HackBGRT-Animated\bootx64.efi
+2026-05-23 22:55:45.632 | pid 36784 |   - animation frames -> \EFI\HackBGRT-Animated\animation\ (if configured)
+2026-05-23 22:55:45.633 | pid 36784 | Proceed with side-by-side install? (type YES)
+2026-05-23 22:55:47.928 | pid 36784 | Folder A:\EFI\HackBGRT-Animated exists. Overwrite only this folder? [y/N]
+2026-05-23 22:55:49.633 | pid 36784 | Backed up existing side-by-side folder to A:\EFI\HackBGRT-Animated.backup-20260523225549.
+2026-05-23 22:55:49.635 | pid 36784 | config.txt:
+2026-05-23 22:55:49.635 | pid 36784 | # vim: set fileencoding=utf-8
+2026-05-23 22:55:49.635 | pid 36784 | # Lines starting with '#' are comments.
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # Boot loader path. MS = either backup or original Windows boot loader.
+2026-05-23 22:55:49.635 | pid 36784 | boot=MS
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # The image is specified with an image line.
+2026-05-23 22:55:49.635 | pid 36784 | # Multiple image lines may be present, in which case one will be picked by random.
+2026-05-23 22:55:49.635 | pid 36784 | # The image line may contain the following parts:
+2026-05-23 22:55:49.635 | pid 36784 | # Any of the following:
+2026-05-23 22:55:49.635 | pid 36784 | #  - "x=(number) y=(number)" positions the image relative to the screen center.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "x=.(decimal) y=.(decimal)" positions the image as a fraction of the resolution.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "o=(0|90|180|270|keep)", the screen orientation, degrees anticlockwise.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "n=(number)", a weight for this image in the randomization process.
+2026-05-23 22:55:49.635 | pid 36784 | #  - Default values: o=keep x=.5 y=.382 n=1
+2026-05-23 22:55:49.635 | pid 36784 | # One of the following:
+2026-05-23 22:55:49.635 | pid 36784 | #  - "keep" to keep the firmware logo (and coordinates, unless specified).
+2026-05-23 22:55:49.635 | pid 36784 | #  - "remove" to remove the BGRT. Makes x and y meaningless.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "black" to use only a black image. Makes x and y meaningless.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "path=file.bmp" to read an image file.
+2026-05-23 22:55:49.635 | pid 36784 | #    * NOTE: The installer can copy and convert BMP, PNG, JPEG, GIF.
+2026-05-23 22:55:49.635 | pid 36784 | # Examples:
+2026-05-23 22:55:49.635 | pid 36784 | #  - image=remove
+2026-05-23 22:55:49.635 | pid 36784 | #  - image=black
+2026-05-23 22:55:49.635 | pid 36784 | #  - image= x=0 y=.0 path=topimage.bmp
+2026-05-23 22:55:49.635 | pid 36784 | #  - image= n=1 o=90 path=sideways.bmp
+2026-05-23 22:55:49.635 | pid 36784 | #  - image= n=50 y=999999 path=probable.bmp
+2026-05-23 22:55:49.635 | pid 36784 | # The above examples together would produce
+2026-05-23 22:55:49.635 | pid 36784 | #  - 1/54 chance for the default OS logo
+2026-05-23 22:55:49.635 | pid 36784 | #  - 1/54 chance for black screen
+2026-05-23 22:55:49.635 | pid 36784 | #  - 1/54 chance for topimage.bmp, 200 px above the center of the screen
+2026-05-23 22:55:49.635 | pid 36784 | #  - 1/54 chance for splash.bmp, centered, orientation set to 90 degrees
+2026-05-23 22:55:49.635 | pid 36784 | #  - 50/54 chance for probable.bmp, at the bottom edge, explicitly default orientation
+2026-05-23 22:55:49.635 | pid 36784 | # Default: just one image.
+2026-05-23 22:55:49.635 | pid 36784 | image= path=splash.bmp
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # Optional pre-boot animation shown before BGRT replacement.
+2026-05-23 22:55:49.635 | pid 36784 | # Frame files are loaded as: animation_path + animation_prefix + zero-padded index + animation_ext
+2026-05-23 22:55:49.635 | pid 36784 | # Example with defaults: \EFI\HackBGRT\animation\frame_000.bmp, frame_001.bmp, ...
+2026-05-23 22:55:49.635 | pid 36784 | # animation_final:
+2026-05-23 22:55:49.635 | pid 36784 | #  - "last" keeps the final shown frame as BGRT image.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "splash" keeps normal image=... behaviour after animation.
+2026-05-23 22:55:49.635 | pid 36784 | # animation_skip_key:
+2026-05-23 22:55:49.635 | pid 36784 | #  - "esc" allows Escape to skip animation.
+2026-05-23 22:55:49.635 | pid 36784 | #  - "none" disables skip.
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # Preferred resolution. Use 0x0 for maximum and -1x-1 for original.
+2026-05-23 22:55:49.635 | pid 36784 | resolution=0x0
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # Logging (0 for disabled, 1 for enabled).
+2026-05-23 22:55:49.635 | pid 36784 | # When logging is enabled, setup.exe can show debug information about the current boot.
+2026-05-23 22:55:49.635 | pid 36784 | # The log might occupy a few kilobytes of RAM.
+2026-05-23 22:55:49.635 | pid 36784 | log=1
+2026-05-23 22:55:49.635 | pid 36784 | 
+2026-05-23 22:55:49.635 | pid 36784 | # Debug mode (0 for disabled, 1 for enabled).
+2026-05-23 22:55:49.635 | pid 36784 | # Shows debug information and prompts for keypress before booting.
+2026-05-23 22:55:49.635 | pid 36784 | debug=0
+2026-05-23 22:55:49.635 | pid 36784 | animation_clear_each_frame=1
+2026-05-23 22:55:49.635 | pid 36784 | animation_preload=1
+2026-05-23 22:55:49.635 | pid 36784 | animation_max_preload_mb=64
+2026-05-23 22:55:49.635 | pid 36784 | animation_allow_frame_skip=0
+2026-05-23 22:55:49.635 | pid 36784 | animation=1
+2026-05-23 22:55:49.635 | pid 36784 | animation_path=\EFI\HackBGRT\animation\
+2026-05-23 22:55:49.635 | pid 36784 | animation_prefix=frame_
+2026-05-23 22:55:49.635 | pid 36784 | animation_digits=3
+2026-05-23 22:55:49.635 | pid 36784 | animation_ext=.bmp
+2026-05-23 22:55:49.635 | pid 36784 | animation_fps=10
+2026-05-23 22:55:49.635 | pid 36784 | animation_max_ms=5000
+2026-05-23 22:55:49.635 | pid 36784 | animation_final=last
+2026-05-23 22:55:49.635 | pid 36784 | animation_skip_key=esc
+2026-05-23 22:55:49.640 | pid 36784 | Animation output estimate: ~13549 KiB across 51 BMP frames.
+2026-05-23 22:55:49.640 | pid 36784 | Cleaned old animation frames from A:\EFI\HackBGRT-Animated\animation.
+2026-05-23 22:55:49.814 | pid 36784 | Installed 51 animation frames to A:\EFI\HackBGRT-Animated\animation.
+2026-05-23 22:55:49.818 | pid 36784 | Installed config.txt to A:\EFI\HackBGRT-Animated\config.txt.
+2026-05-23 22:55:49.821 | pid 36784 | InstallImageFile: splash.bmp
+2026-05-23 22:55:49.830 | pid 36784 | Installed image splash.bmp to A:\EFI\HackBGRT-Animated\splash.bmp, size 282x498.
+2026-05-23 22:55:49.839 | pid 36784 | Installed efi\bootx64.efi to A:\EFI\HackBGRT-Animated\bootx64.efi.
+2026-05-23 22:55:49.840 | pid 36784 | Side-by-side files copied to A:\EFI\HackBGRT-Animated.
+2026-05-23 22:55:49.841 | pid 36784 | Updating entry 0005 for path \EFI\HackBGRT-Animated\bootx64.efi.
+2026-05-23 22:55:49.841 | pid 36784 | Read EFI variable: Boot0000 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    t W i n d o w s   B o o t   M a n a g e r     *                      6 8W  L "s         F \ E F I \ M i c r o s o f t \ B o o t \ b o o t m g f w . e f i      WINDOWS         x   B C D O B J E C T = { 9 d e a 8 6 2 c - 5 c d d - 4 e 7 0 - a c c 1 - f 3 2 b 3 4 4 d 4 7 9 5 }                    ' Bytes='01 00 00 00 74 00 57 00 69 00 6E 00 64 00 6F 00 77 00 73 00 20 00 42 00 6F 00 6F 00 74 00 20 00 4D 00 61 00 6E 00 61 00 67 00 65 00 72 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 46 00 5C 00 45 00 46 00 49 00 5C 00 4D 00 69 00 63 00 72 00 6F 00 73 00 6F 00 66 00 74 00 5C 00 42 00 6F 00 6F 00 74 00 5C 00 62 00 6F 00 6F 00 74 00 6D 00 67 00 66 00 77 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00 57 49 4E 44 4F 57 53 00 01 00 00 00 88 00 00 00 78 00 00 00 42 00 43 00 44 00 4F 00 42 00 4A 00 45 00 43 00 54 00 3D 00 7B 00 39 00 64 00 65 00 61 00 38 00 36 00 32 00 63 00 2D 00 35 00 63 00 64 00 64 00 2D 00 34 00 65 00 37 00 30 00 2D 00 61 00 63 00 63 00 31 00 2D 00 66 00 33 00 32 00 62 00 33 00 34 00 34 00 64 00 34 00 37 00 39 00 35 00 7D 00 00 00 12 00 01 00 00 00 10 00 00 00 04 00 00 00 7F FF 04 00'
+2026-05-23 22:55:49.841 | pid 36784 | Read EFI variable: Boot0005 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    x H a c k B G R T   A n i m a t e d   T e s t     *                      6 8W  L "s         J \ E F I \ H a c k B G R T - A n i m a t e d \ b o o t x 6 4 . e f i      ' Bytes='01 00 00 00 78 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 20 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 20 00 54 00 65 00 73 00 74 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 4A 00 5C 00 45 00 46 00 49 00 5C 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 2D 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 5C 00 62 00 6F 00 6F 00 74 00 78 00 36 00 34 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00'
+2026-05-23 22:55:49.844 | pid 36784 | Writing EFI variable Boot0005 (see log for details)
+2026-05-23 22:55:49.844 | pid 36784 | Writing EFI variable: Boot0005 Guid={8be4df61-93ca-11d2-aa0d-00e098032b8c} Attributes=7 Text='    x H a c k B G R T   A n i m a t e d   T e s t     *                      6 8W  L "s         J \ E F I \ H a c k B G R T - A n i m a t e d \ b o o t x 6 4 . e f i      ' Bytes='01 00 00 00 78 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 20 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 20 00 54 00 65 00 73 00 74 00 00 00 04 01 2A 00 01 00 00 00 00 08 00 00 00 00 00 00 00 20 08 00 00 00 00 00 1A 36 C1 38 57 C5 84 4C A4 22 73 B0 84 DF 8E 91 02 02 04 04 4A 00 5C 00 45 00 46 00 49 00 5C 00 48 00 61 00 63 00 6B 00 42 00 47 00 52 00 54 00 2D 00 41 00 6E 00 69 00 6D 00 61 00 74 00 65 00 64 00 5C 00 62 00 6F 00 6F 00 74 00 78 00 36 00 34 00 2E 00 65 00 66 00 69 00 00 00 7F FF 04 00'
+2026-05-23 22:55:49.847 | pid 36784 | Created side-by-side entry without changing BootOrder: HackBGRT Animated Test
+2026-05-23 22:55:49.851 | pid 36784 | Side-by-side install completed.
+2026-05-23 22:55:49.852 | pid 36784 | Completed action 'install-side-by-side' successfully.
+2026-05-23 22:55:49.852 | pid 36784 | If you need to report a bug,
+2026-05-23 22:55:49.852 | pid 36784 |  - run this setup again with menu option L (show-boot-log)
+2026-05-23 22:55:49.852 | pid 36784 |  - then include the setup-log.txt file with your report.
+2026-05-23 22:55:49.853 | pid 36784 | Press any key to quit.
+2026-05-23 22:55:51.084 | pid 36784 | Execute: mountvol A:\ /D
+2026-05-23 22:55:51.090 | pid 36784 | Exit code: 0, output:
+2026-05-23 22:55:51.090 | pid 36784 | 
+2026-05-23 22:55:51.090 | pid 36784 | 
+2026-05-23 22:55:51.090 | pid 36784 | 
+2026-05-23 22:55:51.105 | pid 18372 | Privileged action (install-side-by-side) completed.
+2026-05-23 22:55:51.107 | pid 18372 | 
+2026-05-23 22:55:51.107 | pid 18372 | All done!
+2026-05-23 22:55:51.108 | pid 18372 | If you need to report a bug,
+2026-05-23 22:55:51.108 | pid 18372 |  - run this setup again with menu option L (show-boot-log)
+2026-05-23 22:55:51.108 | pid 18372 |  - then include the setup-log.txt file with your report.
+2026-05-23 22:55:51.108 | pid 18372 | Press any key to quit.
