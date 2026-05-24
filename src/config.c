@@ -200,6 +200,10 @@ void ReadConfigLine(struct HackBGRT_config* config, EFI_FILE_HANDLE base_dir, co
 		config->animation = (StrCmp(line, L"animation=1") == 0);
 		return;
 	}
+	if (StrnCmp(line, L"active_theme=", 13) == 0) {
+		config->active_theme = line + 13;
+		return;
+	}
 	if (StrnCmp(line, L"animation_path=", 15) == 0) {
 		config->animation_path = line + 15;
 		return;
@@ -270,6 +274,23 @@ void ReadConfigLine(struct HackBGRT_config* config, EFI_FILE_HANDLE base_dir, co
 		return;
 	}
 	if (ParsePositiveInt(line, L"animation_max_ms=", 1, 60000, &config->animation_max_ms)) {
+		return;
+	}
+	if (StrnCmp(line, L"panic_key_enabled=", 18) == 0) {
+		config->panic_key_enabled = (StrCmp(line, L"panic_key_enabled=1") == 0);
+		return;
+	}
+	if (StrnCmp(line, L"panic_key=", 10) == 0) {
+		const CHAR16* value = line + 10;
+		if (StriCmp(value, L"esc") == 0) {
+			config->panic_key = HackBGRT_PANIC_ESC;
+		} else if (StriCmp(value, L"space") == 0) {
+			config->panic_key = HackBGRT_PANIC_SPACE;
+		} else if (StriCmp(value, L"none") == 0) {
+			config->panic_key = HackBGRT_PANIC_NONE;
+		} else {
+			Log(1, L"Invalid panic_key: %s\n", value);
+		}
 		return;
 	}
 	if (StrnCmp(line, L"boot=", 5) == 0) {

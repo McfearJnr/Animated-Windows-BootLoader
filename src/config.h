@@ -38,6 +38,12 @@ enum HackBGRT_orientation {
 	HackBGRT_ORIENTATION_KEEP = -1,
 };
 
+enum HackBGRT_panic_key {
+	HackBGRT_PANIC_NONE = 0,
+	HackBGRT_PANIC_ESC = 1,
+	HackBGRT_PANIC_SPACE = 2,
+};
+
 /**
  * The configuration for one image.
  */
@@ -56,6 +62,7 @@ struct HackBGRT_config {
 	int debug, log;
 	struct HackBGRT_image_config image;
 	int image_weight_sum;
+	const CHAR16* active_theme;
 	int animation;
 	const CHAR16* animation_path;
 	const CHAR16* animation_prefix;
@@ -68,6 +75,8 @@ struct HackBGRT_config {
 	int animation_preload;
 	int animation_max_preload_mb;
 	int animation_allow_frame_skip;
+	int panic_key_enabled;
+	int panic_key;
 	int resolution_x;
 	int resolution_y;
 	int old_resolution_x;

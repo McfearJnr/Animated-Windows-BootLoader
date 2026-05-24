@@ -16,9 +16,9 @@ using Microsoft.Win32;
 #if GIT_DESCRIBE
 [assembly: AssemblyVersion(GIT_DESCRIBE.numeric)]
 #endif
-[assembly: AssemblyProduct("HackBGRT")]
-[assembly: AssemblyTitle("HackBGRT Installer")]
-[assembly: AssemblyDescription("HackBGRT boot logo changer for UEFI")]
+[assembly: AssemblyProduct("HackBGRT-Animated")]
+[assembly: AssemblyTitle("HackBGRT-Animated Setup")]
+[assembly: AssemblyDescription("HackBGRT-Animated UEFI boot logo manager")]
 
 /**
  * HackBGRT Setup.
@@ -82,6 +82,11 @@ public class Setup {
 		"disable",
 		"uninstall",
 		"uninstall-side-by-side",
+		"disable-animated",
+		"modify-config",
+		"modify-boot-order",
+		"sync-animated-config",
+		"show-boot-log-file",
 		"boot-to-fw",
 		"ask-to-boot-to-fw",
 		"show-boot-log",
@@ -173,16 +178,16 @@ public class Setup {
 	protected bool LoaderIsSigned = false;
 
 	/** @var Installer mode. */
-	protected InstallMode Mode = InstallMode.Normal;
+	protected InstallMode Mode = InstallMode.SideBySide;
 
 	/** @var Custom install mode from args/config. */
-	protected string InstallModeConfig = "normal";
+	protected string InstallModeConfig = "side_by_side";
 
 	/** @var Side-by-side folder path (EFI absolute, with leading backslash). */
 	protected string SideBySideFolder = "\\EFI\\HackBGRT-Animated\\";
 
 	/** @var Side-by-side UEFI entry label. */
-	protected string SideBySideBootName = "HackBGRT Animated Test";
+	protected string SideBySideBootName = "HackBGRT-Animated";
 
 	/** @var Should side-by-side install make the entry default? */
 	protected bool SideBySideMakeDefault = false;
@@ -197,12 +202,12 @@ public class Setup {
 	protected const string LocalAnimationPreviewDir = "animation-preview";
 
 	/** @var GIF import defaults and limits. */
-	protected const int AnimationDefaultFps = 30;
+	protected const int AnimationDefaultFps = 15;
 	protected const int AnimationDefaultMaxMs = 3000;
 	protected const int AnimationDefaultMaxWidth = 400;
 	protected const int AnimationDefaultMaxHeight = 400;
-	protected const int AnimationMinMaxMs = 2000;
-	protected const int AnimationMaxMaxMs = 7000;
+	protected const int AnimationMinMaxMs = 1;
+	protected const int AnimationMaxMaxMs = 10000;
 	protected const int AnimationPreviewMaxFrames = 60;
 	protected const long MaxGifBytes = 32L * 1024 * 1024;
 	protected const int MaxGifPixels = 1920 * 1080;
@@ -227,6 +232,111 @@ public class Setup {
 		File.AppendAllText("setup-log.txt", prefix + s.Replace("\n", "\n" + prefix) + "\n");
 	}
 
+	protected class SetupStatus {
+		public bool Installed;
+		public bool EfiFolderFound;
+		public bool BootEntryFound;
+		public bool InBootOrder;
+		public bool IsDefault;
+		public bool WindowsBootManagerFound;
+		public bool NormalHackBgrtFound;
+		public bool AnimatedInstallFound;
+		public string ActiveTheme = "none";
+		public bool BootEntriesReadable;
+		public bool HasLastBootLog;
+		public bool IsAdmin;
+		public string EfiFolderDisplay = "missing";
+		public string Note = "";
+	}
+
+	protected class MenuItem {
+		public string Id;
+		public string Label;
+		public bool Enabled = true;
+		public string DisabledReason = "";
+		public Action Action;
+	}
+
+	protected class ConsoleMenu {
+		public string Title;
+		public string Subtitle;
+		public string Hint = "Use \u2191/\u2193 to move, Enter to select, Esc/Backspace to go back, Q to quit.";
+		public List<MenuItem> Items = new List<MenuItem>();
+		public int SelectedIndex;
+
+		public ConsoleMenu(string title, string subtitle = "") {
+			Title = title;
+			Subtitle = subtitle;
+		}
+
+		public MenuItem Show(Func<List<string>> statusLinesProvider = null) {
+			while (true) {
+				Console.Clear();
+				Console.ForegroundColor = ConsoleColor.Cyan;
+				Console.WriteLine("============================================================");
+				Console.WriteLine($" {Title}");
+				if (!String.IsNullOrWhiteSpace(Subtitle)) {
+					Console.WriteLine($" {Subtitle}");
+				}
+				Console.WriteLine("============================================================");
+				Console.ResetColor();
+
+				if (statusLinesProvider != null) {
+					var lines = statusLinesProvider();
+					if (lines != null && lines.Count > 0) {
+						Console.ForegroundColor = ConsoleColor.Gray;
+						Console.WriteLine();
+						Console.WriteLine(" Status");
+						foreach (var line in lines) {
+							Console.WriteLine($"  {line}");
+						}
+						Console.ResetColor();
+					}
+				}
+
+				Console.WriteLine();
+				Console.ForegroundColor = ConsoleColor.DarkGray;
+				Console.WriteLine($" {Hint}");
+				Console.ResetColor();
+				Console.WriteLine();
+
+				for (int i = 0; i < Items.Count; ++i) {
+					var item = Items[i];
+					var selected = i == SelectedIndex;
+					var prefix = selected ? " > " : "   ";
+					if (selected) {
+						Console.ForegroundColor = item.Enabled ? ConsoleColor.White : ConsoleColor.DarkGray;
+					} else {
+						Console.ForegroundColor = item.Enabled ? ConsoleColor.Gray : ConsoleColor.DarkGray;
+					}
+					var label = item.Enabled ? item.Label : $"{item.Label} (unavailable)";
+					Console.WriteLine(prefix + label);
+					Console.ResetColor();
+				}
+
+				var key = Console.ReadKey(true).Key;
+				if (key == ConsoleKey.UpArrow) {
+					SelectedIndex = (SelectedIndex - 1 + Items.Count) % Items.Count;
+					continue;
+				}
+				if (key == ConsoleKey.DownArrow) {
+					SelectedIndex = (SelectedIndex + 1) % Items.Count;
+					continue;
+				}
+				if (key == ConsoleKey.Q || key == ConsoleKey.Escape || key == ConsoleKey.Backspace) {
+					return null;
+				}
+				if (key == ConsoleKey.Enter) {
+					var item = Items[SelectedIndex];
+					if (!item.Enabled) {
+						continue;
+					}
+					return item;
+				}
+			}
+		}
+	}
+
 	/**
 	 * Start another process.
 	 *
@@ -246,6 +356,64 @@ public class Setup {
 		}
 	}
 
+	public struct CommandResult {
+		public string App;
+		public string Args;
+		public string Stdout;
+		public string Stderr;
+		public int ExitCode;
+		public bool Success;
+
+		public string CombinedOutput {
+			get {
+				var s = "";
+				if (!String.IsNullOrWhiteSpace(Stdout)) {
+					s += Stdout;
+				}
+				if (!String.IsNullOrWhiteSpace(Stderr)) {
+					if (s != "") {
+						s += "\n";
+					}
+					s += Stderr;
+				}
+				return s;
+			}
+		}
+	}
+
+	public static CommandResult ExecuteDetailed(string app, string args) {
+		Log($"ExecuteDetailed: {app} {args}");
+		try {
+			var info = new ProcessStartInfo(app, args);
+			info.UseShellExecute = false;
+			info.RedirectStandardOutput = true;
+			info.RedirectStandardError = true;
+			var p = Process.Start(info);
+			string stdout = p.StandardOutput.ReadToEnd();
+			string stderr = p.StandardError.ReadToEnd();
+			p.WaitForExit();
+			Log($"Exit code: {p.ExitCode}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}\n");
+			return new CommandResult {
+				App = app,
+				Args = args,
+				Stdout = stdout ?? "",
+				Stderr = stderr ?? "",
+				ExitCode = p.ExitCode,
+				Success = p.ExitCode == 0,
+			};
+		} catch (Exception e) {
+			Log($"ExecuteDetailed failed: {e}");
+			return new CommandResult {
+				App = app,
+				Args = args,
+				Stdout = "",
+				Stderr = e.ToString(),
+				ExitCode = -1,
+				Success = false,
+			};
+		}
+	}
+
 	/**
 	 * Execute another process, return the output.
 	 *
@@ -254,20 +422,8 @@ public class Setup {
 	 * @return The output and exit code.
 	 */
 	public static (string Output, int ExitCode) Execute(string app, string args) {
-		Log($"Execute: {app} {args}");
-		try {
-			var info = new ProcessStartInfo(app, args);
-			info.UseShellExecute = false;
-			info.RedirectStandardOutput = true;
-			var p = Process.Start(info);
-			string output = p.StandardOutput.ReadToEnd();
-			p.WaitForExit();
-			Log($"Exit code: {p.ExitCode}, output:\n{output}\n\n");
-			return (output, p.ExitCode);
-		} catch (Exception e) {
-			Log($"Execute failed: {e.ToString()}");
-			return (null, -1);
-		}
+		var result = ExecuteDetailed(app, args);
+		return (result.CombinedOutput, result.ExitCode);
 	}
 
 	/**
@@ -496,13 +652,27 @@ public class Setup {
 		if (!int.TryParse(GetConfigValue(lines, "animation_digits", $"{result.Digits}"), out result.Digits) || result.Digits < 1 || result.Digits > 9) {
 			result.Digits = 3;
 		}
-		if (!int.TryParse(GetConfigValue(lines, "animation_fps", $"{result.Fps}"), out result.Fps) || result.Fps < 1 || result.Fps > 120) {
+		if (!int.TryParse(GetConfigValue(lines, "animation_fps", $"{result.Fps}"), out result.Fps)) {
 			result.Fps = AnimationDefaultFps;
 		}
-		if (!int.TryParse(GetConfigValue(lines, "animation_max_ms", $"{result.MaxMs}"), out result.MaxMs) || result.MaxMs < AnimationMinMaxMs || result.MaxMs > AnimationMaxMaxMs) {
+		if (!int.TryParse(GetConfigValue(lines, "animation_max_ms", $"{result.MaxMs}"), out result.MaxMs)) {
 			result.MaxMs = AnimationDefaultMaxMs;
 		}
+		NormalizeAnimationTiming(result);
 		return result;
+	}
+
+	protected static void NormalizeAnimationTiming(AnimationSettings settings) {
+		if (settings.Fps <= 0) {
+			settings.Fps = AnimationDefaultFps;
+		} else if (settings.Fps > 60) {
+			settings.Fps = 60;
+		}
+		if (settings.MaxMs <= 0) {
+			settings.MaxMs = AnimationDefaultMaxMs;
+		} else if (settings.MaxMs > 10000) {
+			settings.MaxMs = 10000;
+		}
 	}
 
 	/**
@@ -990,6 +1160,11 @@ public class Setup {
 		lines = InstallAnimationFramesToEsp(lines);
 		File.WriteAllLines(Path.Combine(InstallPath, "config.txt"), lines);
 		WriteLine($"Installed config.txt to {Path.Combine(InstallPath, "config.txt")}.");
+		if (Mode == InstallMode.SideBySide && Directory.Exists(ThemesRoot)) {
+			var themesTarget = Path.Combine(InstallPath, "themes");
+			CopyDirectoryRecursive(ThemesRoot, themesTarget);
+			WriteLine($"Installed themes to {themesTarget}.");
+		}
 		foreach (var line in lines.Where(s => s.StartsWith("image="))) {
 			var delim = "path=";
 			var i = line.IndexOf(delim);
@@ -1147,67 +1322,74 @@ public class Setup {
 	}
 
 	/**
-	 * Create side-by-side boot entry.
+	 * Create HackBGRT-Animated boot entry.
 	 */
 	protected void CreateSideBySideEntry(bool addToBootOrder, bool makeDefault) {
 		var e = new EfiBootEntries();
 		e.MakeEntry(EntryLoaderPath, EntryLabel, true, DryRun);
 		if (makeDefault) {
 			e.MakeEntryDefault(EntryLoaderPath, DryRun);
-			WriteLine($"Created side-by-side entry and made it default: {EntryLabel}");
+			WriteLine($"Created HackBGRT-Animated entry and made it default: {EntryLabel}");
 			return;
 		}
 		if (addToBootOrder) {
 			e.AddEntryWithoutDefault(EntryLoaderPath, DryRun);
-			WriteLine($"Created side-by-side entry and added it to BootOrder: {EntryLabel}");
+			WriteLine($"Created HackBGRT-Animated entry and added it to BootOrder: {EntryLabel}");
 		} else {
-			WriteLine($"Created side-by-side entry without changing BootOrder: {EntryLabel}");
+			WriteLine($"Created HackBGRT-Animated entry without changing BootOrder: {EntryLabel}");
 		}
 	}
 
 	/**
-	 * Remove side-by-side boot entry by path/label.
+	 * Remove HackBGRT-Animated boot entry by path/label.
 	 */
 	protected void RemoveSideBySideEntry() {
 		var e = new EfiBootEntries();
 		var removedByPath = e.DeleteEntry(EntryLoaderPath, DryRun);
 		var removedByLabel = e.DeleteEntryByLabel(SideBySideBootName, DryRun);
 		if (removedByPath || removedByLabel) {
-			WriteLine("Removed side-by-side firmware boot entry.");
+			WriteLine("Removed HackBGRT-Animated firmware boot entry.");
 		} else {
-			WriteLine("Side-by-side firmware boot entry was not found.");
+			WriteLine("HackBGRT-Animated firmware boot entry was not found.");
 		}
 	}
 
 	/**
-	 * Install side-by-side files and entry with rollback for isolated folder.
+	 * Install HackBGRT-Animated files and entry with rollback for isolated folder.
 	 */
 	protected void InstallSideBySide(bool addToBootOrder, bool makeDefault) {
 		Mode = InstallMode.SideBySide;
 		ValidateSideBySideSettings();
+		WriteLine("[1/5] Mounting/locating EFI partition...");
 		InitEspInfo();
+		WriteLine("[2/5] Preparing theme/config migration...");
+		EnsureThemeMigrationDefaults();
 
 		PrintSideBySideDryRunSummary(false);
 		ConfirmSideBySideWrite(false);
 
 		var hadExistingFolder = Directory.Exists(InstallPath);
 		if (hadExistingFolder && !AskYesNo($"Folder {InstallPath} exists. Overwrite only this folder?", false)) {
-			throw new SetupException("Side-by-side install canceled by user.");
+			throw new SetupException("HackBGRT-Animated install canceled by user.");
 		}
 		string backupPath = null;
 		if (hadExistingFolder) {
 			backupPath = InstallPath.TrimEnd('\\') + ".backup-" + DateTime.Now.ToString("yyyyMMddHHmmss");
 			Directory.Move(InstallPath, backupPath);
-			WriteLine($"Backed up existing side-by-side folder to {backupPath}.");
+			WriteLine($"Backed up existing HackBGRT-Animated folder to {backupPath}.");
 		}
 
 		try {
+			WriteLine("[3/5] Copying EFI loader/config/assets...");
 			InstallFiles();
+			WriteLine("[4/5] Creating/repairing boot entry...");
 			CreateSideBySideEntry(addToBootOrder, makeDefault);
+			WriteLine("[5/5] Verifying install...");
+			ExecuteDetailed("bcdedit", "/enum firmware /v");
 			if (backupPath != null && Directory.Exists(backupPath)) {
 				Directory.Delete(backupPath, true);
 			}
-			WriteLine("Side-by-side install completed.");
+			WriteLine("HackBGRT-Animated install completed.");
 		} catch (Exception e) {
 			Log($"InstallSideBySide failed: {e}");
 			try {
@@ -1216,19 +1398,19 @@ public class Setup {
 				}
 				if (backupPath != null && Directory.Exists(backupPath)) {
 					Directory.Move(backupPath, InstallPath);
-					WriteLine("Restored previous side-by-side folder backup.");
+					WriteLine("Restored previous HackBGRT-Animated folder backup.");
 				}
 			} catch (Exception rollbackError) {
 				Log($"InstallSideBySide rollback failed: {rollbackError}");
 			}
-			WriteLine("Side-by-side install failed after partial changes.");
+			WriteLine("HackBGRT-Animated install failed after partial changes.");
 			WriteLine($"Cleanup instructions: remove {InstallPath} and delete boot entry '{SideBySideBootName}' path {EntryLoaderPath}.");
 			throw;
 		}
 	}
 
 	/**
-	 * Uninstall side-by-side entry and folder only.
+	 * Uninstall HackBGRT-Animated entry and folder only.
 	 */
 	protected void UninstallSideBySide() {
 		Mode = InstallMode.SideBySide;
@@ -1239,9 +1421,9 @@ public class Setup {
 		RemoveSideBySideEntry();
 		if (Directory.Exists(InstallPath)) {
 			Directory.Delete(InstallPath, true);
-			WriteLine($"Removed side-by-side folder: {InstallPath}");
+			WriteLine($"Removed HackBGRT-Animated folder: {InstallPath}");
 		} else {
-			WriteLine($"Side-by-side folder not found: {InstallPath}");
+			WriteLine($"HackBGRT-Animated folder not found: {InstallPath}");
 		}
 	}
 
@@ -1412,7 +1594,7 @@ public class Setup {
 				throw new SetupException("No GIF file path provided.");
 			}
 
-			int fps = ReadIntOrDefault("Animation FPS (1-120)", AnimationDefaultFps, 1, 120);
+			int fps = ReadIntOrDefault("Animation FPS (1-60)", AnimationDefaultFps, 1, 60);
 			int maxMs = ReadIntOrDefault($"Animation max duration in ms ({AnimationMinMaxMs}-{AnimationMaxMaxMs})", AnimationDefaultMaxMs, AnimationMinMaxMs, AnimationMaxMaxMs);
 			var size = ReadSizeOrDefault("Output frame size WxH", AnimationDefaultMaxWidth, AnimationDefaultMaxHeight);
 			var background = ReadColorOrDefault("Background color in RRGGBB", Color.Black);
@@ -1473,7 +1655,7 @@ public class Setup {
 		}
 		SideBySideFolder = folder;
 		if (String.IsNullOrWhiteSpace(SideBySideBootName)) {
-			SideBySideBootName = "HackBGRT Animated Test";
+			SideBySideBootName = "HackBGRT-Animated";
 		}
 	}
 
@@ -1488,7 +1670,7 @@ public class Setup {
 	}
 
 	/**
-	 * Print side-by-side dry-run summary.
+	 * Print HackBGRT-Animated dry-run summary.
 	 */
 	protected void PrintSideBySideDryRunSummary(bool uninstallMode) {
 		var entries = new EfiBootEntries();
@@ -1501,7 +1683,7 @@ public class Setup {
 		var sideFolder = InstallPath;
 
 		WriteLine();
-		WriteLine("Side-by-side mode dry-run summary:");
+		WriteLine("HackBGRT-Animated install dry-run summary:");
 		WriteLine($" install_mode={InstallModeConfig}");
 		WriteLine($" target_efi_folder=\\{InstallFolderRelative}\\");
 		WriteLine($" boot_entry_path={EntryLoaderPath}");
@@ -1528,19 +1710,20 @@ public class Setup {
 	}
 
 	/**
-	 * Ask for explicit confirmation before side-by-side writes.
+	 * Ask for explicit confirmation before HackBGRT-Animated writes.
 	 */
 	protected void ConfirmSideBySideWrite(bool uninstallMode) {
 		if (Batch) {
-			throw new SetupException("Side-by-side mode in batch requires explicit confirmation via interactive mode.");
+			throw new SetupException("HackBGRT-Animated mode in batch requires explicit confirmation via interactive mode.");
 		}
 		var prompt = uninstallMode
-			? "Proceed with side-by-side uninstall? (type YES)"
-			: "Proceed with side-by-side install? (type YES)";
+			? "Type REMOVE to uninstall HackBGRT-Animated."
+			: "Proceed with HackBGRT-Animated install? (type YES)";
 		WriteLine(prompt);
 		var answer = (Console.ReadLine() ?? "").Trim();
-		if (!String.Equals(answer, "YES", StringComparison.Ordinal)) {
-			throw new SetupException("Side-by-side action canceled by user.");
+		var expected = uninstallMode ? "REMOVE" : "YES";
+		if (!String.Equals(answer, expected, StringComparison.Ordinal)) {
+			throw new SetupException("HackBGRT-Animated action canceled by user.");
 		}
 	}
 
@@ -1823,69 +2006,828 @@ public class Setup {
 	 * Ask for user's choice and install/uninstall.
 	 */
 	protected void ShowMenu() {
-		WriteLine();
-		WriteLine("Choose action (press a key):");
-		WriteLine(" I = install");
-		WriteLine("     - creates a new EFI boot entry for HackBGRT");
-		WriteLine(" J = install (alternative)");
-		WriteLine("     - creates a new EFI boot entry with an alternative method");
-		WriteLine("     - try this if the first option doesn't work");
-		WriteLine(" O = install (legacy)");
-		WriteLine("     - overwrites the MS boot loader; gets removed by Windows updates");
-		WriteLine("     - use as last resort; may brick your system if configured incorrectly");
-		WriteLine(" F = install files only");
-		WriteLine("     - ok for updating config, doesn't touch boot entries");
-		WriteLine(" T = install side-by-side test");
-		WriteLine("     - installs to \\EFI\\HackBGRT-Animated\\ by default");
-		WriteLine("     - creates separate 'HackBGRT Animated Test' entry");
-		WriteLine("     - does NOT change BootOrder by default");
-		WriteLine(" Y = install side-by-side + add to boot order");
-		WriteLine("     - creates separate test entry and adds it after Windows");
-		WriteLine(" U = uninstall side-by-side test");
-		WriteLine("     - removes only test entry/folder, keeps normal HackBGRT");
-		WriteLine(" D = disable");
-		WriteLine("     - removes created entries, restores MS boot loader");
-		WriteLine(" R = remove completely");
-		WriteLine("     - disables, then deletes all files and images");
-		WriteLine(" B = boot to UEFI setup");
-		WriteLine("     - lets you disable Secure Boot");
-		WriteLine("     - lets you move HackBGRT before Windows in boot order");
-		WriteLine(" L = show boot log (what HackBGRT did during boot)");
-		WriteLine(" C = cancel");
+		while (true) {
+			var status = BuildSetupStatus();
+			var menu = BuildMainMenu(status);
+			var selected = menu.Show(() => BuildStatusLines(status));
+			if (selected == null || selected.Id == "quit") {
+				throw new ExitSetup(0);
+			}
+			try {
+				selected.Action?.Invoke();
+			} catch (ExitSetup) {
+				throw;
+			} catch (SetupException e) {
+				ShowErrorScreen("Action failed", e.Message);
+			} catch (Exception e) {
+				Log(e.ToString());
+				ShowErrorScreen("Unexpected error", e.ToString());
+			}
+		}
+	}
 
-		var k = Console.ReadKey().Key;
-		Log($"User input: {k}");
-		WriteLine();
-		if (k == ConsoleKey.I || k == ConsoleKey.J || k == ConsoleKey.O || k == ConsoleKey.F || k == ConsoleKey.T || k == ConsoleKey.Y) {
-			Configure();
+	/**
+	 * Build status snapshot for the main TUI.
+	 */
+	protected SetupStatus BuildSetupStatus() {
+		var oldMode = Mode;
+		Mode = InstallMode.SideBySide;
+		ValidateSideBySideSettings();
+		var status = new SetupStatus {
+			IsAdmin = HasPrivileges(),
+			EfiFolderDisplay = "\\" + InstallFolderRelative + "\\",
+		};
+		try {
+			var lines = File.ReadAllLines("config.txt");
+			status.ActiveTheme = GetConfigValue(lines, "active_theme", "none") ?? "none";
+		} catch {
+			status.ActiveTheme = "none";
 		}
-		if (k == ConsoleKey.I) {
-			RunPrivilegedActions(new string[] { "disable", "install", "enable-bcdedit", "ask-to-boot-to-fw" });
-		} else if (k == ConsoleKey.J) {
-			RunPrivilegedActions(new string[] { "disable", "install", "enable-entry", "ask-to-boot-to-fw" });
-		} else if (k == ConsoleKey.O) {
-			RunPrivilegedActions(new string[] { "disable", "install", "enable-overwrite" });
-		} else if (k == ConsoleKey.F) {
-			RunPrivilegedActions(new string[] { "disable-overwrite", "install" });
-		} else if (k == ConsoleKey.T) {
-			RunPrivilegedActions(new string[] { "install-side-by-side" });
-		} else if (k == ConsoleKey.Y) {
-			RunPrivilegedActions(new string[] { "install-side-by-side-add-order" });
-		} else if (k == ConsoleKey.U) {
-			RunPrivilegedActions(new string[] { "uninstall-side-by-side" });
-		} else if (k == ConsoleKey.D) {
-			RunPrivilegedActions(new string[] { "disable" });
-		} else if (k == ConsoleKey.R) {
-			RunPrivilegedActions(new string[] { "uninstall" });
-		} else if (k == ConsoleKey.B) {
-			RunPrivilegedActions(new string[] { "boot-to-fw" });
-		} else if (k == ConsoleKey.L) {
-			RunPrivilegedActions(new string[] { "show-boot-log" });
-		} else if (k == ConsoleKey.C) {
-			throw new ExitSetup(1);
+
+		try {
+			if (!String.IsNullOrWhiteSpace(UserEspPath)) {
+				Esp.TryPath(UserEspPath, false);
+			}
+			if (Esp.Location != null || Esp.FindOrMount()) {
+				var installPath = InstallFolderRelative.Split(new[] { '\\' }, StringSplitOptions.RemoveEmptyEntries).Aggregate(Esp.Location, Path.Combine);
+				status.EfiFolderFound = Directory.Exists(installPath);
+				status.HasLastBootLog = File.Exists(Path.Combine(installPath, "lastboot.log"));
+			}
+		} catch (Exception e) {
+			Log($"BuildSetupStatus ESP detection failed: {e}");
+			status.Note = "ESP not detected";
+		}
+
+		try {
+			var entries = new EfiBootEntries();
+			status.BootEntriesReadable = true;
+			status.WindowsBootManagerFound = entries.WindowsEntry.Item3 != null;
+			status.NormalHackBgrtFound = entries.EntryByPath(EfiBootEntries.OwnLoaderPath).Item3 != null;
+			var (_, _, entry) = entries.EntryByPath(EntryLoaderPath);
+			status.BootEntryFound = entry != null;
+			status.AnimatedInstallFound = status.BootEntryFound;
+			var entryStatus = entries.GetEntryStatus(EntryLoaderPath);
+			status.InBootOrder = entryStatus != EfiBootEntries.OwnEntryStatus.NotFound && entryStatus != EfiBootEntries.OwnEntryStatus.Disabled;
+			status.IsDefault = entryStatus == EfiBootEntries.OwnEntryStatus.Enabled;
+		} catch (Exception e) {
+			Log($"BuildSetupStatus boot entry detection failed: {e}");
+			status.BootEntriesReadable = false;
+		}
+
+		// Treat install as present if either the animated EFI folder or its boot entry exists.
+		// This avoids false negatives when firmware enumeration or ESP mounting is restricted.
+		status.Installed = status.EfiFolderFound || status.BootEntryFound;
+		Mode = oldMode;
+		return status;
+	}
+
+	/**
+	 * Build lines for status panel.
+	 */
+	protected List<string> BuildStatusLines(SetupStatus status) {
+		return new List<string> {
+			$"Installed:        {(status.Installed ? "Yes" : "No")}",
+			$"EFI folder:       {(status.EfiFolderFound ? status.EfiFolderDisplay : "missing")}",
+			$"Boot entry:       {(status.BootEntryFound ? "Found" : "Missing")}",
+			$"In boot order:    {(status.InBootOrder ? "Yes" : "No")}",
+			$"Default:          {(status.IsDefault ? "Yes" : "No")}",
+			$"Windows BootMgr:  {(status.WindowsBootManagerFound ? "Found" : "Missing")}",
+			$"HackBGRT (normal): {(status.NormalHackBgrtFound ? "Found" : "Missing")}",
+			$"Active theme:     {status.ActiveTheme}",
+		};
+	}
+
+	/**
+	 * Build the main TUI menu.
+	 */
+	protected ConsoleMenu BuildMainMenu(SetupStatus status) {
+		var menu = new ConsoleMenu("HackBGRT-Animated Setup", "Animated UEFI boot logo manager");
+		menu.Items.Add(new MenuItem {
+			Id = "install",
+			Label = status.Installed ? "Install / Update" : "Install",
+			Enabled = true,
+			Action = () => RunPrivilegedActions(new[] { "install-side-by-side-add-order" }),
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "modify-config",
+			Label = "Modify Config",
+			Enabled = true,
+			Action = ShowModifyConfigMenu,
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "modify-boot-order",
+			Label = "Modify Boot Order",
+			Enabled = status.BootEntriesReadable && status.IsAdmin,
+			Action = () => RunPrivilegedActions(new[] { "modify-boot-order" }),
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "disable",
+			Label = "Disable",
+			Enabled = status.Installed && status.BootEntryFound,
+			Action = () => RunPrivilegedActions(new[] { "disable-animated" }),
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "uninstall",
+			Label = "Uninstall",
+			Enabled = status.Installed,
+			Action = () => RunPrivilegedActions(new[] { "uninstall-side-by-side" }),
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "show-boot-log",
+			Label = "Show Boot Log",
+			Enabled = status.HasLastBootLog,
+			Action = () => RunPrivilegedActions(new[] { "show-boot-log-file" }),
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "advanced",
+			Label = "Advanced / Legacy Tools",
+			Enabled = true,
+			Action = ShowAdvancedLegacyToolsMenu,
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "restart-pc",
+			Label = "Restart PC",
+			Enabled = true,
+			Action = RestartPcFromMenu,
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "quit",
+			Label = "Quit",
+			Enabled = true,
+			Action = () => throw new ExitSetup(0),
+		});
+		return menu;
+	}
+
+	protected void RestartPcFromMenu() {
+		if (!AskYesNo("Restart PC now?", false)) {
+			return;
+		}
+		WriteLine("Restarting now...");
+		var p = StartProcess("shutdown", "-f -r -t 1");
+		if (p == null) {
+			throw new SetupException("Failed to start restart command.");
+		}
+		throw new ExitSetup(0);
+	}
+
+	/**
+	 * Show a standard error screen for TUI actions.
+	 */
+	protected static void ShowErrorScreen(string title, string details) {
+		Console.Clear();
+		Console.ForegroundColor = ConsoleColor.Red;
+		Console.WriteLine("============================================================");
+		Console.WriteLine($" {title}");
+		Console.WriteLine("============================================================");
+		Console.ResetColor();
+		Console.WriteLine();
+		Console.WriteLine(details);
+		Console.WriteLine();
+		Console.ForegroundColor = ConsoleColor.DarkGray;
+		Console.WriteLine("Press any key to continue.");
+		Console.ResetColor();
+		Console.ReadKey(true);
+	}
+
+	/**
+	 * Legacy tools warning and submenu.
+	 */
+	protected void ShowAdvancedLegacyToolsMenu() {
+		Console.Clear();
+		Console.ForegroundColor = ConsoleColor.Yellow;
+		Console.WriteLine("These are legacy HackBGRT tools.");
+		Console.WriteLine("They may modify boot entries in ways normal HackBGRT-Animated users do not need.");
+		Console.ResetColor();
+		Console.WriteLine();
+		Console.WriteLine("Press Enter to continue, or Esc to go back.");
+		var warnKey = Console.ReadKey(true).Key;
+		if (warnKey == ConsoleKey.Escape || warnKey == ConsoleKey.Backspace || warnKey == ConsoleKey.Q) {
+			return;
+		}
+		var menu = new ConsoleMenu("Advanced / Legacy Tools");
+		menu.Items.Add(new MenuItem { Id = "legacy-install", Label = "Legacy install files only", Action = () => RunPrivilegedActions(new[] { "install" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-enable-entry", Label = "Legacy enable entry", Action = () => RunPrivilegedActions(new[] { "enable-entry" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-enable-bcd", Label = "Legacy enable via BCDEdit", Action = () => RunPrivilegedActions(new[] { "enable-bcdedit" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-enable-overwrite", Label = "Legacy overwrite MS loader mode", Action = () => RunPrivilegedActions(new[] { "enable-overwrite" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-disable", Label = "Legacy disable", Action = () => RunPrivilegedActions(new[] { "disable" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-uninstall", Label = "Legacy uninstall", Action = () => RunPrivilegedActions(new[] { "uninstall" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-fw", Label = "Boot to UEFI setup", Action = () => RunPrivilegedActions(new[] { "boot-to-fw" }) });
+		menu.Items.Add(new MenuItem { Id = "legacy-bootlog", Label = "Show EFI variable boot log", Action = () => RunPrivilegedActions(new[] { "show-boot-log" }) });
+		menu.Items.Add(new MenuItem { Id = "back", Label = "Back", Action = () => { } });
+		menu.Show();
+	}
+
+	protected static string[] ReadConfigLinesSafe(string path) {
+		return File.Exists(path) ? File.ReadAllLines(path) : new string[0];
+	}
+
+	protected static void UpsertConfigValue(string path, string key, string value) {
+		var lines = ReadConfigLinesSafe(path).ToList();
+		var prefix = key + "=";
+		lines = lines.Where(line => !line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
+		lines.Add($"{key}={value}");
+		File.WriteAllLines(path, lines);
+	}
+
+	protected static string SanitizeThemeName(string name) {
+		var trimmed = (name ?? "").Trim();
+		if (trimmed == "") {
+			return "";
+		}
+		var chars = trimmed.Select(c => Char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '-').ToArray();
+		return new string(chars).Trim('-');
+	}
+
+	protected static string ThemesRoot => Path.Combine(Directory.GetCurrentDirectory(), "themes");
+
+	protected static string GetActiveThemeFromConfig() {
+		var lines = ReadConfigLinesSafe("config.txt");
+		return GetConfigValue(lines, "active_theme", "none") ?? "none";
+	}
+
+	protected static IEnumerable<string> EnumerateThemeNames() {
+		if (!Directory.Exists(ThemesRoot)) {
+			return Enumerable.Empty<string>();
+		}
+		return Directory.GetDirectories(ThemesRoot)
+			.Select(Path.GetFileName)
+			.Where(name => File.Exists(Path.Combine(ThemesRoot, name, "theme.ini")))
+			.OrderBy(name => name);
+	}
+
+	protected static void ShowInfoScreen(string title, IEnumerable<string> lines) {
+		Console.Clear();
+		Console.ForegroundColor = ConsoleColor.Cyan;
+		Console.WriteLine("============================================================");
+		Console.WriteLine($" {title}");
+		Console.WriteLine("============================================================");
+		Console.ResetColor();
+		Console.WriteLine();
+		foreach (var line in lines) {
+			Console.WriteLine(line);
+		}
+		Console.WriteLine();
+		Console.ForegroundColor = ConsoleColor.DarkGray;
+		Console.WriteLine("Press any key to continue.");
+		Console.ResetColor();
+		Console.ReadKey(true);
+	}
+
+	protected void SetActiveTheme(string themeName, bool syncToEsp = true) {
+		if (String.IsNullOrWhiteSpace(themeName)) {
+			throw new SetupException("Theme name cannot be empty.");
+		}
+		UpsertConfigValue("config.txt", "active_theme", themeName);
+		WriteLine($"Active theme set to: {themeName}");
+		if (syncToEsp) {
+			SyncAnimatedConfigToEsp(true);
+		}
+	}
+
+	protected string GetThemeIniPath(string themeName) {
+		return Path.Combine(ThemesRoot, themeName, "theme.ini");
+	}
+
+	protected void EnsureThemeDirectory(string themeName) {
+		var dir = Path.Combine(ThemesRoot, themeName);
+		Directory.CreateDirectory(dir);
+		Directory.CreateDirectory(Path.Combine(dir, "animation"));
+	}
+
+	protected void ConvertImageToBmp24(string srcPath, string dstPath) {
+		using var img = new Bitmap(srcPath);
+		using var bmp = new Bitmap(img.Width, img.Height, PixelFormat.Format24bppRgb);
+		using (Graphics g = Graphics.FromImage(bmp)) {
+			g.DrawImageUnscaledAndClipped(img, new Rectangle(Point.Empty, img.Size));
+		}
+		bmp.Save(dstPath, ImageFormat.Bmp);
+	}
+
+	protected void EnsureThemeMigrationDefaults() {
+		Directory.CreateDirectory(ThemesRoot);
+		var existing = EnumerateThemeNames().ToList();
+		if (existing.Count == 0) {
+			var defaultTheme = "default";
+			EnsureThemeDirectory(defaultTheme);
+			var rootLines = ReadConfigLinesSafe("config.txt");
+			var settings = ParseAnimationSettings(rootLines);
+			WriteThemeIni(defaultTheme, settings, settings.Enabled, true, true, "last");
+			if (File.Exists("splash.bmp")) {
+				File.Copy("splash.bmp", Path.Combine(ThemesRoot, defaultTheme, "splash.bmp"), true);
+			}
+			if (Directory.Exists(LocalAnimationDir)) {
+				foreach (var frame in Directory.GetFiles(LocalAnimationDir, "*.bmp")) {
+					File.Copy(frame, Path.Combine(ThemesRoot, defaultTheme, "animation", Path.GetFileName(frame)), true);
+				}
+			}
+			WriteLine($"Theme migration: created themes\\{defaultTheme}.");
+			UpsertConfigValue("config.txt", "active_theme", defaultTheme);
 		} else {
-			throw new SetupException("Invalid choice!");
+			var active = GetActiveThemeFromConfig();
+			if (active == "none" || !existing.Contains(active, StringComparer.OrdinalIgnoreCase)) {
+				UpsertConfigValue("config.txt", "active_theme", existing.First());
+			}
 		}
+
+		var cfg = ReadConfigLinesSafe("config.txt");
+		if (GetConfigValue(cfg, "panic_key_enabled", null) == null) {
+			UpsertConfigValue("config.txt", "panic_key_enabled", "1");
+		}
+		if (GetConfigValue(cfg, "panic_key", null) == null) {
+			UpsertConfigValue("config.txt", "panic_key", "esc");
+		}
+	}
+
+	protected void CopyDirectoryRecursive(string sourceDir, string targetDir) {
+		Directory.CreateDirectory(targetDir);
+		foreach (var file in Directory.GetFiles(sourceDir)) {
+			File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), true);
+		}
+		foreach (var dir in Directory.GetDirectories(sourceDir)) {
+			CopyDirectoryRecursive(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
+		}
+	}
+
+	protected void SyncAnimatedConfigToEsp(bool allowMissingInstall = false) {
+		if (!HasPrivileges() && !DryRun) {
+			RunPrivilegedActions(new[] { "sync-animated-config" });
+			return;
+		}
+
+		var oldMode = Mode;
+		try {
+			Mode = InstallMode.SideBySide;
+			ValidateSideBySideSettings();
+			InitEspPath();
+			InitEspInfo();
+
+			if (!Directory.Exists(InstallPath)) {
+				if (allowMissingInstall) {
+					WriteLine($"HackBGRT-Animated is not installed at {InstallPath}; kept local config only.");
+					return;
+				}
+				throw new SetupException($"HackBGRT-Animated is not installed at {InstallPath}.");
+			}
+
+			var lines = File.ReadAllLines("config.txt");
+			lines = AdjustConfigForInstallMode(lines);
+			File.WriteAllLines(Path.Combine(InstallPath, "config.txt"), lines);
+
+			// Keep fallback image assets synced with config.txt image= directives.
+			foreach (var line in lines.Where(s => s.StartsWith("image="))) {
+				var delim = "path=";
+				var i = line.IndexOf(delim, StringComparison.OrdinalIgnoreCase);
+				if (i <= 0) {
+					continue;
+				}
+				var value = line.Substring(i + delim.Length);
+				var dir = "\\" + InstallFolderRelative.Trim('\\') + "\\";
+				if (value.StartsWith(dir, StringComparison.OrdinalIgnoreCase)) {
+					var fileName = value.Substring(dir.Length);
+					if (File.Exists(fileName)) {
+						InstallImageFile(fileName);
+					}
+				} else if (!value.StartsWith("\\", StringComparison.OrdinalIgnoreCase) && File.Exists(value)) {
+					InstallImageFile(value);
+				}
+			}
+
+			if (Directory.Exists(ThemesRoot)) {
+				var themesTarget = Path.Combine(InstallPath, "themes");
+				CopyDirectoryRecursive(ThemesRoot, themesTarget);
+			}
+
+			WriteLine($"Synced HackBGRT-Animated config/themes to {InstallPath}.");
+		} finally {
+			Mode = oldMode;
+		}
+	}
+
+	protected void WriteThemeIni(string themeName, AnimationSettings settings, bool enabled, bool preload = true, bool clearEachFrame = 1 == 1, string finalMode = "last") {
+		NormalizeAnimationTiming(settings);
+		var themeDir = Path.Combine(ThemesRoot, themeName);
+		Directory.CreateDirectory(themeDir);
+		var lines = new List<string> {
+			"# HackBGRT-Animated theme configuration",
+			$"animation={(enabled ? 1 : 0)}",
+			$"animation_path=\\{InstallFolderRelative}\\themes\\{themeName}\\animation\\",
+			$"animation_prefix={settings.Prefix}",
+			$"animation_digits={settings.Digits}",
+			$"animation_ext={settings.Ext}",
+			$"animation_fps={settings.Fps}",
+			$"animation_max_ms={settings.MaxMs}",
+			$"animation_final={finalMode}",
+			$"animation_preload={(preload ? 1 : 0)}",
+			$"animation_clear_each_frame={(clearEachFrame ? 1 : 0)}",
+			"animation_max_preload_mb=64",
+			"animation_allow_frame_skip=0",
+			$"image= path=\\{InstallFolderRelative}\\themes\\{themeName}\\splash.bmp",
+		};
+		File.WriteAllLines(Path.Combine(themeDir, "theme.ini"), lines);
+	}
+
+	protected void ImportThemeFromGif() {
+		var defaults = new AnimationSettings {
+			Enabled = true,
+			Path = "\\" + InstallFolderRelative.Trim('\\') + "\\animation\\",
+			Prefix = "frame_",
+			Digits = 3,
+			Ext = ".bmp",
+			Fps = 15,
+			MaxMs = 3000,
+		};
+		WriteLine("[1/6] Reading GIF input...");
+		WriteLine("GIF path:");
+		var gifPath = (Console.ReadLine() ?? "").Trim().Trim('"');
+		if (gifPath == "") {
+			throw new SetupException("No GIF path provided.");
+		}
+		WriteLine("Theme name:");
+		var themeName = SanitizeThemeName(Console.ReadLine());
+		if (themeName == "") {
+			throw new SetupException("Theme name is invalid.");
+		}
+		var size = ReadSizeOrDefault("Output size WxH", 400, 400);
+		defaults.Fps = ReadIntOrDefault("FPS", 15, 1, 60);
+		defaults.MaxMs = ReadIntOrDefault("Max duration ms", 3000, AnimationMinMaxMs, AnimationMaxMaxMs);
+		var background = ReadColorOrDefault("Background color RRGGBB", Color.Black);
+
+		WriteLine("[2/6] Normalizing frame timing...");
+		var export = ExportGifToBmpFrames(gifPath, defaults, size.Width, size.Height, background);
+		WriteLine($"Estimated output size: ~{export.EstimatedBytes / 1024} KiB.");
+		WriteLine($"Output frames: {export.OutputFrameCount}");
+		if (!AskYesNo("Continue with this import?", true)) {
+			RemoveLocalAnimationStaging();
+			return;
+		}
+		WriteLine("[3/6] Preparing theme folder...");
+		EnsureThemeDirectory(themeName);
+		var themeDir = Path.Combine(ThemesRoot, themeName);
+		var animationDir = Path.Combine(themeDir, "animation");
+		foreach (var old in Directory.GetFiles(animationDir, "*.bmp")) {
+			File.Delete(old);
+		}
+
+		WriteLine("[4/6] Exporting BMP frames...");
+		foreach (var frame in Directory.GetFiles(LocalAnimationDir, "*.bmp")) {
+			var fileName = Path.GetFileName(frame);
+			if (!IsAnimationFrameName(fileName, defaults)) {
+				continue;
+			}
+			File.Copy(frame, Path.Combine(animationDir, fileName), true);
+		}
+		var firstFrame = Path.Combine(animationDir, BuildAnimationFrameName(defaults, 1));
+		if (File.Exists(firstFrame)) {
+			File.Copy(firstFrame, Path.Combine(themeDir, "splash.bmp"), true);
+		}
+
+		WriteLine("[5/6] Writing theme.ini...");
+		WriteThemeIni(themeName, defaults, true, true, false, "last");
+
+		WriteLine("[6/6] Verifying theme...");
+		if (!File.Exists(Path.Combine(themeDir, "theme.ini"))) {
+			throw new SetupException("Failed to write theme.ini");
+		}
+		if (!Directory.GetFiles(animationDir, "*.bmp").Any()) {
+			throw new SetupException("No BMP animation frames were written.");
+		}
+
+		if (AskYesNo($"Set '{themeName}' as active theme?", true)) {
+			SetActiveTheme(themeName, false);
+		}
+		SyncAnimatedConfigToEsp(true);
+		RemoveLocalAnimationStaging();
+		WriteLine($"Theme import complete: {themeName}");
+	}
+
+	protected void SelectActiveTheme() {
+		var names = EnumerateThemeNames().ToList();
+		if (names.Count == 0) {
+			ShowInfoScreen("Active Theme", new[] { "No themes found. Import a GIF first." });
+			return;
+		}
+		var active = GetActiveThemeFromConfig();
+		var menu = new ConsoleMenu("Select Active Theme");
+		foreach (var name in names) {
+			var themeIni = GetThemeIniPath(name);
+			var themeSettings = ParseAnimationSettings(ReadConfigLinesSafe(themeIni));
+			var timing = $"{themeSettings.Fps}fps/{themeSettings.MaxMs}ms";
+			menu.Items.Add(new MenuItem {
+				Id = "theme-" + name,
+				Label = name == active ? $"{name} ({timing}, current)" : $"{name} ({timing})",
+				Action = () => SetActiveTheme(name),
+			});
+		}
+		menu.Items.Add(new MenuItem { Id = "back", Label = "Back", Action = () => { } });
+		var selected = menu.Show();
+		if (selected == null || selected.Id == "back") {
+			return;
+		}
+		selected.Action?.Invoke();
+	}
+
+	protected void EditAnimationSettingsForTheme() {
+		var themeName = GetActiveThemeFromConfig();
+		if (themeName == "none") {
+			throw new SetupException("No active theme selected.");
+		}
+		var iniPath = GetThemeIniPath(themeName);
+		var lines = ReadConfigLinesSafe(iniPath);
+		if (lines.Length == 0) {
+			throw new SetupException($"theme.ini not found for active theme '{themeName}'.");
+		}
+		var settings = ParseAnimationSettings(lines);
+		settings.Fps = ReadIntOrDefault("Animation FPS", settings.Fps, 1, 60);
+		settings.MaxMs = ReadIntOrDefault("Animation max duration ms", settings.MaxMs, AnimationMinMaxMs, AnimationMaxMaxMs);
+		var preload = AskYesNo("Enable preload?", GetConfigValue(lines, "animation_preload", "1") == "1");
+		var clear = AskYesNo("Clear each frame?", GetConfigValue(lines, "animation_clear_each_frame", "1") == "1");
+		WriteLine("Final frame mode: last or splash [last]");
+		var finalMode = (Console.ReadLine() ?? "").Trim().ToLowerInvariant();
+		if (finalMode != "splash") {
+			finalMode = "last";
+		}
+		WriteThemeIni(themeName, settings, true, preload, clear, finalMode);
+		SyncAnimatedConfigToEsp(true);
+		WriteLine("Theme animation settings updated.");
+	}
+
+	protected void ConfigurePanicKey() {
+		var lines = ReadConfigLinesSafe("config.txt");
+		var currentEnabled = GetConfigValue(lines, "panic_key_enabled", "1") == "1";
+		var currentKey = GetConfigValue(lines, "panic_key", "esc");
+		WriteLine($"Current panic key: enabled={(currentEnabled ? 1 : 0)}, key={currentKey}");
+		WriteLine("Choose panic key: esc | space | none [esc]");
+		var key = (Console.ReadLine() ?? "").Trim().ToLowerInvariant();
+		if (key == "") {
+			key = "esc";
+		}
+		if (key != "esc" && key != "space" && key != "none") {
+			throw new SetupException("Invalid panic key. Use esc, space, or none.");
+		}
+		if (key == "none") {
+			UpsertConfigValue("config.txt", "panic_key_enabled", "0");
+			UpsertConfigValue("config.txt", "panic_key", "none");
+		} else {
+			UpsertConfigValue("config.txt", "panic_key_enabled", "1");
+			UpsertConfigValue("config.txt", "panic_key", key);
+		}
+		SyncAnimatedConfigToEsp(true);
+		WriteLine("Panic key configuration updated.");
+	}
+
+	protected void SetThemeSplashImage() {
+		var themeName = GetActiveThemeFromConfig();
+		if (themeName == "none") {
+			throw new SetupException("No active theme selected.");
+		}
+		WriteLine("Path to fallback image (bmp/png/jpg/gif):");
+		var src = (Console.ReadLine() ?? "").Trim().Trim('"');
+		if (!File.Exists(src)) {
+			throw new SetupException($"Image not found: {src}");
+		}
+		EnsureThemeDirectory(themeName);
+		var dst = Path.Combine(ThemesRoot, themeName, "splash.bmp");
+		ConvertImageToBmp24(src, dst);
+		SyncAnimatedConfigToEsp(true);
+		WriteLine($"Saved static fallback image to {dst}");
+	}
+
+	protected void OpenConfigFolder() {
+		StartProcess("explorer", $"\"{Directory.GetCurrentDirectory()}\"");
+	}
+
+	protected void ShowModifyConfigMenu() {
+		while (true) {
+			var menu = new ConsoleMenu("Modify Config");
+			menu.Items.Add(new MenuItem { Id = "active-theme", Label = "Active Theme", Action = SelectActiveTheme });
+			menu.Items.Add(new MenuItem { Id = "import-gif", Label = "Import New Theme from GIF", Action = ImportThemeFromGif });
+			menu.Items.Add(new MenuItem { Id = "anim-settings", Label = "Animation Settings", Action = EditAnimationSettingsForTheme });
+			menu.Items.Add(new MenuItem { Id = "panic", Label = "Panic/Fallback Key", Action = ConfigurePanicKey });
+			menu.Items.Add(new MenuItem { Id = "static-fallback", Label = "Static Fallback Image", Action = SetThemeSplashImage });
+			menu.Items.Add(new MenuItem { Id = "open-folder", Label = "Open Config Folder", Action = OpenConfigFolder });
+			menu.Items.Add(new MenuItem { Id = "back", Label = "Back", Action = () => { } });
+			var selected = menu.Show();
+			if (selected == null || selected.Id == "back") {
+				return;
+			}
+			selected.Action?.Invoke();
+		}
+	}
+
+	protected class FirmwareBootEntry {
+		public string Guid;
+		public string Description;
+		public string Path;
+	}
+
+	protected class FirmwareBootSnapshot {
+		public List<string> DisplayOrder = new List<string>();
+		public Dictionary<string, FirmwareBootEntry> Entries = new Dictionary<string, FirmwareBootEntry>(StringComparer.OrdinalIgnoreCase);
+		public string RawOutput;
+	}
+
+	protected static readonly Regex GuidPattern = new Regex(@"\{[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}\}", RegexOptions.Compiled);
+
+	protected FirmwareBootSnapshot ReadFirmwareBootSnapshot() {
+		var result = ExecuteDetailed("bcdedit", "/enum firmware /v");
+		if (!result.Success) {
+			throw new SetupException($"bcdedit failed:\n{result.CombinedOutput}");
+		}
+		var snapshot = new FirmwareBootSnapshot { RawOutput = result.CombinedOutput };
+		var lines = result.CombinedOutput.Replace("\r", "").Split('\n');
+		string currentId = null;
+		FirmwareBootEntry current = null;
+		bool inFwBootMgrDisplay = false;
+
+		Action flush = () => {
+			if (current != null && current.Guid != null) {
+				snapshot.Entries[current.Guid] = current;
+			}
+			current = null;
+			currentId = null;
+			inFwBootMgrDisplay = false;
+		};
+
+		foreach (var raw in lines) {
+			var line = raw ?? "";
+			var trimmed = line.Trim();
+			if (trimmed == "") {
+				flush();
+				continue;
+			}
+			var idMatch = Regex.Match(trimmed, @"^identifier\s+(.+)$", RegexOptions.IgnoreCase);
+			if (idMatch.Success) {
+				flush();
+				currentId = idMatch.Groups[1].Value.Trim();
+				if (GuidPattern.IsMatch(currentId)) {
+					current = new FirmwareBootEntry { Guid = currentId, Description = currentId, Path = "" };
+				}
+				continue;
+			}
+			if (currentId != null && current == null && String.Equals(currentId, "{fwbootmgr}", StringComparison.OrdinalIgnoreCase)) {
+				if (trimmed.StartsWith("displayorder", StringComparison.OrdinalIgnoreCase)) {
+					inFwBootMgrDisplay = true;
+				}
+				if (inFwBootMgrDisplay) {
+					foreach (Match m in GuidPattern.Matches(trimmed)) {
+						snapshot.DisplayOrder.Add(m.Value);
+					}
+					if (!trimmed.StartsWith("displayorder", StringComparison.OrdinalIgnoreCase) && !GuidPattern.IsMatch(trimmed)) {
+						inFwBootMgrDisplay = false;
+					}
+				}
+				continue;
+			}
+			if (current == null) {
+				continue;
+			}
+			var descMatch = Regex.Match(trimmed, @"^description\s+(.+)$", RegexOptions.IgnoreCase);
+			if (descMatch.Success) {
+				current.Description = descMatch.Groups[1].Value.Trim();
+				continue;
+			}
+			var pathMatch = Regex.Match(trimmed, @"^path\s+(.+)$", RegexOptions.IgnoreCase);
+			if (pathMatch.Success) {
+				current.Path = pathMatch.Groups[1].Value.Trim();
+			}
+		}
+		flush();
+		if (!snapshot.DisplayOrder.Any()) {
+			foreach (var guid in snapshot.Entries.Keys.OrderBy(k => k)) {
+				snapshot.DisplayOrder.Add(guid);
+			}
+		}
+		return snapshot;
+	}
+
+	protected void SaveFirmwareDisplayOrder(List<string> order) {
+		if (order == null || order.Count == 0) {
+			throw new SetupException("Cannot save empty firmware displayorder.");
+		}
+		var args = "/set {fwbootmgr} displayorder " + String.Join(" ", order);
+		var result = ExecuteDetailed("bcdedit", args);
+		if (!result.Success) {
+			throw new SetupException($"Failed to save boot order.\nCommand: bcdedit {args}\n{result.CombinedOutput}");
+		}
+	}
+
+	protected void ShowModifyBootOrderMenu() {
+		var snapshot = ReadFirmwareBootSnapshot();
+		var order = snapshot.DisplayOrder.ToList();
+		if (!order.Any()) {
+			throw new SetupException("No firmware boot entries found.");
+		}
+		int selected = 0;
+		while (true) {
+			Console.Clear();
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.WriteLine("============================================================");
+			Console.WriteLine(" Modify Boot Order");
+			Console.WriteLine("============================================================");
+			Console.ResetColor();
+			Console.WriteLine();
+			Console.WriteLine("Use ↑/↓ to select, +/- or PgUp/PgDn to move, Enter to save, Esc to cancel.");
+			Console.WriteLine("W = Restore Windows Boot Manager First, H = Put HackBGRT-Animated First.");
+			Console.WriteLine();
+			for (int i = 0; i < order.Count; ++i) {
+				var guid = order[i];
+				snapshot.Entries.TryGetValue(guid, out var entry);
+				var label = entry?.Description ?? "(unknown)";
+				var path = entry?.Path ?? "";
+				if (i == selected) {
+					Console.ForegroundColor = ConsoleColor.White;
+					Console.Write("> ");
+				} else {
+					Console.ForegroundColor = ConsoleColor.Gray;
+					Console.Write("  ");
+				}
+				Console.WriteLine($"{i + 1}. {label} [{guid}] {path}");
+				Console.ResetColor();
+			}
+			var key = Console.ReadKey(true).Key;
+			if (key == ConsoleKey.UpArrow) {
+				selected = (selected - 1 + order.Count) % order.Count;
+			} else if (key == ConsoleKey.DownArrow) {
+				selected = (selected + 1) % order.Count;
+			} else if (key == ConsoleKey.Add || key == ConsoleKey.OemPlus || key == ConsoleKey.PageUp) {
+				if (selected > 0) {
+					(order[selected - 1], order[selected]) = (order[selected], order[selected - 1]);
+					selected--;
+				}
+			} else if (key == ConsoleKey.Subtract || key == ConsoleKey.OemMinus || key == ConsoleKey.PageDown) {
+				if (selected + 1 < order.Count) {
+					(order[selected + 1], order[selected]) = (order[selected], order[selected + 1]);
+					selected++;
+				}
+			} else if (key == ConsoleKey.W) {
+				var windows = order.FirstOrDefault(guid => snapshot.Entries.TryGetValue(guid, out var e) && String.Equals(e.Description, "Windows Boot Manager", StringComparison.OrdinalIgnoreCase));
+				if (windows != null) {
+					order.Remove(windows);
+					order.Insert(0, windows);
+					selected = 0;
+				}
+			} else if (key == ConsoleKey.H) {
+				var animated = order.FirstOrDefault(guid => snapshot.Entries.TryGetValue(guid, out var e) && (String.Equals(e.Description, "HackBGRT-Animated", StringComparison.OrdinalIgnoreCase) || String.Equals(e.Path, EntryLoaderPath, StringComparison.OrdinalIgnoreCase)));
+				if (animated != null) {
+					order.Remove(animated);
+					order.Insert(0, animated);
+					selected = 0;
+				}
+			} else if (key == ConsoleKey.Enter) {
+				if (!AskYesNo("This changes firmware boot order only. It does not delete boot entries. Save now?", false)) {
+					continue;
+				}
+				SaveFirmwareDisplayOrder(order);
+				WriteLine("Firmware boot order updated.");
+				return;
+			} else if (key == ConsoleKey.Escape || key == ConsoleKey.Backspace || key == ConsoleKey.Q) {
+				return;
+			}
+		}
+	}
+
+	protected void DisableAnimatedFlow() {
+		var menu = new ConsoleMenu("Disable HackBGRT-Animated");
+		menu.Items.Add(new MenuItem {
+			Id = "windows-first",
+			Label = "Move Windows Boot Manager first",
+			Action = () => {
+				var snapshot = ReadFirmwareBootSnapshot();
+				var windows = snapshot.DisplayOrder.FirstOrDefault(g => snapshot.Entries.TryGetValue(g, out var e) && String.Equals(e.Description, "Windows Boot Manager", StringComparison.OrdinalIgnoreCase));
+				if (windows == null) {
+					throw new SetupException("Windows Boot Manager entry not found.");
+				}
+				var order = snapshot.DisplayOrder.Where(g => !String.Equals(g, windows, StringComparison.OrdinalIgnoreCase)).ToList();
+				order.Insert(0, windows);
+				SaveFirmwareDisplayOrder(order);
+				WriteLine("Windows Boot Manager moved to first position.");
+			},
+		});
+		menu.Items.Add(new MenuItem {
+			Id = "remove-visible",
+			Label = "Remove HackBGRT-Animated from visible boot order",
+			Action = () => {
+				new EfiBootEntries().DisableEntry(EntryLoaderPath, DryRun);
+				WriteLine("HackBGRT-Animated was removed from BootOrder. Files and entry remain.");
+			},
+		});
+		menu.Items.Add(new MenuItem { Id = "cancel", Label = "Cancel", Action = () => { } });
+		menu.Show();
+	}
+
+	protected void ShowBootLogFromSideBySideFolder() {
+		Mode = InstallMode.SideBySide;
+		ValidateSideBySideSettings();
+		InitEspPath();
+		InitEspInfo();
+		var logPath = Path.Combine(InstallPath, "lastboot.log");
+		if (!File.Exists(logPath)) {
+			ShowInfoScreen("Boot Log", new[] { "No boot log found." });
+			return;
+		}
+		var lines = File.ReadAllLines(logPath);
+		ShowInfoScreen("Boot Log", lines.Take(400));
 	}
 
 	/**
@@ -1894,7 +2836,8 @@ public class Setup {
 	 * @param actions The actions to run.
 	 */
 	protected void RunPrivilegedActions(IEnumerable<string> actions) {
-		var args = String.Join(" ", actions);
+		var actionList = actions.ToList();
+		var args = String.Join(" ", actionList);
 		Log($"RunPrivilegedActions: {args}");
 		if (!HasPrivileges() && !DryRun) {
 			var self = Assembly.GetExecutingAssembly().Location;
@@ -1915,28 +2858,32 @@ public class Setup {
 		InitEspPath();
 		ValidateSideBySideSettings();
 		InitEspInfo();
-		Func<string> tryGetBootLog = () => {
-			try {
-				return $"\n--- BOOT LOG START ---\n{Efi.GetHackBGRTLog()}\n--- BOOT LOG END ---";
-			} catch (NotImplementedException e) {
-				throw new SetupException($"Looks like you're not booting in UEFI mode. ({e.Message})");
-			}
-		};
-		var bootLog = tryGetBootLog();
-		Setup.Log(bootLog);
+		var syncOnly = actionList.All(a => a == "sync-animated-config");
+		var bootLog = "";
+		if (!syncOnly) {
+			Func<string> tryGetBootLog = () => {
+				try {
+					return $"\n--- BOOT LOG START ---\n{Efi.GetHackBGRTLog()}\n--- BOOT LOG END ---";
+				} catch (NotImplementedException e) {
+					throw new SetupException($"Looks like you're not booting in UEFI mode. ({e.Message})");
+				}
+			};
+			bootLog = tryGetBootLog();
+			Setup.Log(bootLog);
 
-		Efi.LogBGRT();
-		CheckEntries();
+			Efi.LogBGRT();
+			CheckEntries();
 
-		if (GetBootTime() is DateTime bootTime) {
-			var configTime = new[] { File.GetCreationTime("config.txt"), File.GetLastWriteTime("config.txt") }.Max();
-			Log($"Boot time = {bootTime}, config.txt changed = {configTime}");
-			if (configTime > bootTime) {
-				WriteLine($"Windows was booted at {bootTime}. Remember to reboot after installing!");
+			if (GetBootTime() is DateTime bootTime) {
+				var configTime = new[] { File.GetCreationTime("config.txt"), File.GetLastWriteTime("config.txt") }.Max();
+				Log($"Boot time = {bootTime}, config.txt changed = {configTime}");
+				if (configTime > bootTime) {
+					WriteLine($"Windows was booted at {bootTime}. Remember to reboot after installing!");
+				}
 			}
-		}
-		if (IsHiberbootEnabled()) {
-			WriteLine("You may have to disable Fast Startup (Hiberboot) to reboot properly.");
+			if (IsHiberbootEnabled()) {
+				WriteLine("You may have to disable Fast Startup (Hiberboot) to reboot properly.");
+			}
 		}
 		Action<Action> verify = (Action revert) => {
 			try {
@@ -1962,7 +2909,7 @@ public class Setup {
 			CheckEntries();
 			Execute("bcdedit", "/enum firmware", true);
 		};
-			foreach (var arg in actions) {
+			foreach (var arg in actionList) {
 				Log($"Running action '{arg}'.");
 				if (arg == "install") {
 					InstallFiles();
@@ -1986,10 +2933,20 @@ public class Setup {
 				RestoreMsLoader();
 				} else if (arg == "disable") {
 					Disable();
+				} else if (arg == "disable-animated") {
+					DisableAnimatedFlow();
 				} else if (arg == "uninstall") {
 					Uninstall();
 				} else if (arg == "uninstall-side-by-side") {
 					UninstallSideBySide();
+				} else if (arg == "modify-config") {
+					ShowModifyConfigMenu();
+				} else if (arg == "modify-boot-order") {
+					ShowModifyBootOrderMenu();
+				} else if (arg == "show-boot-log-file") {
+					ShowBootLogFromSideBySideFolder();
+				} else if (arg == "sync-animated-config") {
+					SyncAnimatedConfigToEsp();
 				} else if (arg == "ask-to-boot-to-fw") {
 					AskToBootToFW();
 			} else if (arg == "boot-to-fw") {

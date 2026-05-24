@@ -1,4 +1,35 @@
 boot*.efi
 setup.exe
+*_setup.exe
 src/GIT_DESCRIBE.cs
 html
+
+# .NET build outputs
+src-dotnet/**/bin/
+src-dotnet/**/obj/
+
+# Local/user/generated project data (keep out of git)
+local/
+userdata/
+user-data/
+generated/
+cache/
+logs/
+themes/imported/
+themes/generated/
+*.local.json
+*.user.json
+lastboot.log
+setup.log
+setup-gui.log
+frame_*.bmp
+*.tmp
+
+# Legacy repo-local generated assets
+animation/
+animation-preview/
+themes/
+.migrated-local-data/
+
+# App local folders if portable mode is used from repo paths
+HackBGRT-Animated-Data/

@@ -391,8 +391,10 @@ public class EfiBootEntries {
 			Setup.Log($"Entry already present in BootOrder: {ownNum:X04}");
 			return;
 		}
-		Setup.Log($"Adding entry without making default: {ownNum:X04}");
-		var insertPos = msPos < 0 ? BootOrderInts.Count : msPos + 1;
+		// Keep non-default side-by-side entries visible while preserving current default.
+		// Append at end (equivalent intent to bcdedit ... /addlast).
+		Setup.Log($"Adding entry without making default (add-last): {ownNum:X04}");
+		var insertPos = BootOrderInts.Count;
 		BootOrderInts.Insert(insertPos, ownNum);
 		BootOrder.Data = BootOrderInts.SelectMany(num => new byte[] { (byte)(num & 0xff), (byte)(num >> 8) }).ToArray();
 		Efi.SetVariable(BootOrder, dryRun);

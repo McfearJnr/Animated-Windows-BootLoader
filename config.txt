@@ -63,3 +63,6 @@ animation_ext=.bmp
 animation_fps=20
 animation_max_ms=4000
 animation_final=last
+panic_key_enabled=1
+panic_key=esc
+active_theme=Footy

@@ -1,0 +1,27 @@
+﻿<UserControl x:Class="HackBGRTAnimated.UI.Views.BootOrderPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="Boot Order" FontSize="30" FontWeight="Bold"/>
+            <TextBlock Text="Reorder firmware entries by name. Saving only updates display order." Margin="0,4,0,12"/>
+        </StackPanel>
+
+        <ListView x:Name="BootList" Grid.Row="1"/>
+
+        <WrapPanel Grid.Row="2" Margin="0,12,0,0">
+            <Button Content="Refresh" Margin="4" Click="Refresh_OnClick"/>
+            <Button Content="Move Up" Margin="4" Click="MoveUp_OnClick"/>
+            <Button Content="Move Down" Margin="4" Click="MoveDown_OnClick"/>
+            <Button Content="Save Order" Margin="4" Click="Save_OnClick"/>
+            <Button Content="Restore Windows Boot Manager First" Margin="4" Click="WindowsFirst_OnClick"/>
+            <Button Content="Put HackBGRT-Animated First" Margin="4" Click="AnimatedFirst_OnClick"/>
+        </WrapPanel>
+    </Grid>
+</UserControl>

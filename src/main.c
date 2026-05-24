@@ -25,13 +25,15 @@ static struct HackBGRT_config config = {
 	.animation_prefix = L"frame_",
 	.animation_digits = 3,
 	.animation_ext = L".bmp",
-	.animation_fps = 24,
-	.animation_max_ms = 3500,
+	.animation_fps = 15,
+	.animation_max_ms = 3000,
 	.animation_final_last = 1,
 	.animation_clear_each_frame = 1,
 	.animation_preload = 1,
 	.animation_max_preload_mb = 64,
 	.animation_allow_frame_skip = 0,
+	.panic_key_enabled = 1,
+	.panic_key = HackBGRT_PANIC_ESC,
 };
 
 /**
@@ -555,8 +557,8 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 		Log(config.debug, L"Animation skipped: GOP unavailable.\n");
 		return 0;
 	}
-	if (config.animation_fps <= 0 || config.animation_max_ms <= 0 || config.animation_digits <= 0) {
-		Log(1, L"Animation skipped: invalid animation settings.\n");
+	if (config.animation_digits <= 0) {
+		Log(1, L"Animation skipped: invalid animation_digits.\n");
 		return 0;
 	}
 
@@ -573,13 +575,20 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 	if (animation_fps > 60) {
 		animation_fps = 60;
 	}
+	int animation_max_ms = config.animation_max_ms;
+	if (animation_max_ms <= 0) {
+		animation_max_ms = 3000;
+	}
+	if (animation_max_ms > 10000) {
+		animation_max_ms = 10000;
+	}
 	const UINTN frame_duration_us = max(1, 1000000 / (UINTN) animation_fps);
-	UINTN max_frames = ((UINTN) config.animation_max_ms * 1000U) / frame_duration_us;
+	UINTN max_frames = ((UINTN) animation_max_ms * 1000U) / frame_duration_us;
 	if (max_frames == 0) {
 		max_frames = 1;
 	}
 	Log(config.debug, L"Animation timing: fps=%d, frame_us=%d, max_ms=%d.\n",
-		animation_fps, (int) frame_duration_us, config.animation_max_ms);
+		animation_fps, (int) frame_duration_us, animation_max_ms);
 
 	UINT32 frame_space = 1;
 	for (int i = 0; i < config.animation_digits && frame_space <= 100000000; ++i) {
@@ -889,6 +898,59 @@ static EFI_HANDLE LoadApp(int print_failure, EFI_HANDLE image_handle, EFI_LOADED
 	return result;
 }
 
+static BOOLEAN BuildThemeIniPath(CHAR16* out, UINTN out_len, const CHAR16* theme_name) {
+	if (!out || out_len < 2 || !theme_name || !theme_name[0]) {
+		return FALSE;
+	}
+	static const CHAR16 prefix[] = L"themes\\";
+	static const CHAR16 suffix[] = L"\\theme.ini";
+	UINTN pos = 0;
+	for (UINTN i = 0; prefix[i]; ++i) {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = prefix[i];
+	}
+	for (UINTN i = 0; theme_name[i]; ++i) {
+		if (theme_name[i] == L'\\' || theme_name[i] == L'/' || theme_name[i] == L':') {
+			return FALSE;
+		}
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = theme_name[i];
+	}
+	for (UINTN i = 0; suffix[i]; ++i) {
+		if (pos + 1 >= out_len) {
+			return FALSE;
+		}
+		out[pos++] = suffix[i];
+	}
+	out[pos] = 0;
+	return TRUE;
+}
+
+static BOOLEAN ShouldPanicBypass(void) {
+	if (!config.panic_key_enabled || config.panic_key == HackBGRT_PANIC_NONE) {
+		return FALSE;
+	}
+	EFI_STATUS wait = WaitKey(250);
+	if (wait == EFI_TIMEOUT || EFI_ERROR(wait)) {
+		return FALSE;
+	}
+	EFI_INPUT_KEY key = {0};
+	if (EFI_ERROR(ST->ConIn->ReadKeyStroke(ST->ConIn, &key))) {
+		return FALSE;
+	}
+	if (config.panic_key == HackBGRT_PANIC_ESC) {
+		return key.ScanCode == SCAN_ESC;
+	}
+	if (config.panic_key == HackBGRT_PANIC_SPACE) {
+		return key.UnicodeChar == L' ';
+	}
+	return FALSE;
+}
+
 /**
  * The main program.
  */
@@ -965,8 +1027,36 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *ST_) {
 		}
 	}
 
+	if (config.active_theme && config.active_theme[0]) {
+		CHAR16 theme_ini[512];
+		if (BuildThemeIniPath(theme_ini, 512, config.active_theme)) {
+			if (!ReadConfigFile(&config, base_dir, theme_ini)) {
+				Log(1, L"Failed to load active theme config: %s\n", theme_ini);
+			} else {
+				Log(config.debug, L"Loaded active theme config: %s\n", theme_ini);
+			}
+		} else {
+			Log(1, L"Invalid active_theme value.\n");
+		}
+	}
+
 	if (config.debug) {
 		Log(-1, L"HackBGRT version: %s\n", version);
+	}
+
+	static CHAR16 ms_boot_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi";
+	if (ShouldPanicBypass()) {
+		Log(config.debug, L"Panic key pressed, bypassing HackBGRT animation and BGRT update.\n");
+		EFI_HANDLE panic_next = LoadApp(1, image_handle, image, ms_boot_path);
+		if (panic_next) {
+			if (!config.log) {
+				ClearLogVariable();
+			}
+			if (!EFI_ERROR(BS->StartImage(panic_next, 0, 0))) {
+				return 0;
+			}
+		}
+		Log(1, L"Panic bypass failed to start Windows Boot Manager; continuing normal path.\n");
 	}
 
 	SetResolution(config.resolution_x, config.resolution_y);
@@ -975,7 +1065,6 @@ EFI_STATUS EFIAPI efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *ST_) {
 
 	EFI_HANDLE next_image_handle = 0;
 	static CHAR16 backup_boot_path[] = L"\\EFI\\HackBGRT\\bootmgfw-original.efi";
-	static CHAR16 ms_boot_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi";
 	int try_ms_quietly = 1;
 
 	if (config.boot_path && StriCmp(config.boot_path, L"MS") != 0) {
