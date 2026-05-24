@@ -1,0 +1,36 @@
+﻿<UserControl
+    x:Class="HackBGRTAnimated.WinUI.Controls.ThemeCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    x:Name="Root">
+
+    <Border Style="{StaticResource AppCardBorderStyle}">
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="120"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Width="110" Height="110" CornerRadius="10" Background="{StaticResource AppSurfaceAltBrush}" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
+                <Image Source="{Binding PreviewImage, ElementName=Root}" Stretch="UniformToFill"/>
+            </Border>
+
+            <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="{Binding Title, ElementName=Root}" FontSize="19" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding Subtitle, ElementName=Root}" Style="{StaticResource MutedTextStyle}"/>
+                <TextBlock Text="{Binding Timing, ElementName=Root}" Style="{StaticResource MutedTextStyle}"/>
+                <TextBlock Text="{Binding Stats, ElementName=Root}" Style="{StaticResource MutedTextStyle}"/>
+            </StackPanel>
+
+            <Border Grid.Column="2" VerticalAlignment="Top" Style="{StaticResource PillBorderStyle}"
+                    Background="{Binding ActiveBadgeBackground, ElementName=Root}"
+                    Visibility="{Binding ActiveBadgeVisibility, ElementName=Root}">
+                <TextBlock Text="ACTIVE" FontWeight="SemiBold" FontSize="12"/>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

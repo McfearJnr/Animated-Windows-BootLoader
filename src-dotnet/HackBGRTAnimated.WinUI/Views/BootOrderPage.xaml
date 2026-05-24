@@ -1,0 +1,72 @@
+﻿<Page
+    x:Class="HackBGRTAnimated.WinUI.Views.BootOrderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:HackBGRTAnimated.WinUI.Controls"
+    mc:Ignorable="d"
+    Background="{StaticResource AppBackgroundBrush}">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Margin="20,20,20,12" Style="{StaticResource AppCardBorderStyle}" Background="{StaticResource AppSurfaceAltBrush}">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Boot Order" Style="{StaticResource PageTitleTextStyle}"/>
+                <TextBlock Text="Reorder firmware boot entries by display name." Style="{StaticResource HeroSubHeadingTextStyle}"/>
+                <TextBlock Text="Changes are only saved when you choose Save Order." Style="{StaticResource MutedTextStyle}"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1" Margin="20,0,20,0">
+            <ListView x:Name="BootOrderList">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Expander Margin="0,0,0,8" IsExpanded="False">
+                            <Expander.Header>
+                                <Border Style="{StaticResource AppCardBorderStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Description}" FontWeight="SemiBold"/>
+                                        <TextBlock Text="{Binding Identifier}" Style="{StaticResource MutedTextStyle}"/>
+                                    </StackPanel>
+                                </Border>
+                            </Expander.Header>
+                            <Border Style="{StaticResource AppCardMutedBorderStyle}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Path" Style="{StaticResource MutedTextStyle}"/>
+                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </Expander>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <controls:EmptyState x:Name="BootEmptyState"
+                                 Visibility="Collapsed"
+                                 Title="No firmware entries found"
+                                 Message="Run as administrator and refresh if entries are unavailable."
+                                 IconGlyph="&#xE7AD;"/>
+        </Grid>
+
+        <Border Grid.Row="2" Margin="20,10,20,20" Style="{StaticResource AppCardBorderStyle}">
+            <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Refresh" Style="{StaticResource SecondaryActionButtonStyle}" Click="Refresh_OnClick"/>
+                    <Button Content="Move Up" Style="{StaticResource GhostActionButtonStyle}" Click="MoveUp_OnClick"/>
+                    <Button Content="Move Down" Style="{StaticResource GhostActionButtonStyle}" Click="MoveDown_OnClick"/>
+                    <Button Content="Save Order" Style="{StaticResource PrimaryActionButtonStyle}" Click="Save_OnClick"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Content="Restore Windows Boot Manager First" Style="{StaticResource GhostActionButtonStyle}" Click="WindowsFirst_OnClick"/>
+                    <Button Content="Put HackBGRT-Animated First" Style="{StaticResource GhostActionButtonStyle}" Click="AnimatedFirst_OnClick"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Page>

@@ -1,0 +1,16 @@
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Style x:Key="AppNavigationViewStyle" TargetType="NavigationView">
+        <Setter Property="PaneTitle" Value="HackBGRT-Animated"/>
+        <Setter Property="Background" Value="{StaticResource AppBackgroundBrush}"/>
+        <Setter Property="CompactPaneLength" Value="56"/>
+        <Setter Property="OpenPaneLength" Value="300"/>
+        <Setter Property="SelectionFollowsFocus" Value="Enabled"/>
+    </Style>
+
+    <Style x:Key="AppNavigationItemStyle" TargetType="NavigationViewItem">
+        <Setter Property="Margin" Value="8,2"/>
+    </Style>
+</ResourceDictionary>

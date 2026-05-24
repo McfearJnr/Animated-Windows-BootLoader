@@ -1,0 +1,19 @@
+﻿<UserControl
+    x:Class="HackBGRTAnimated.WinUI.Controls.WarningBanner"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    x:Name="Root">
+
+    <Border Style="{StaticResource AppCardBorderStyle}" BorderBrush="{StaticResource AppWarningBrush}" Background="#1A2A2110">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <FontIcon Glyph="&#xE7BA;" Foreground="{StaticResource AppWarningBrush}" FontSize="18" Margin="0,2,0,0"/>
+            <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Title, ElementName=Root}" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding Message, ElementName=Root}" Style="{StaticResource MutedTextStyle}"/>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

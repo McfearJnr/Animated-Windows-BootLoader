@@ -1,0 +1,14 @@
+<Page
+    x:Class="HackBGRTAnimated.WinUI.Views.PlaceholderPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+    <Grid>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+            <TextBlock x:Name="TitleText" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Phase scaffolding in progress" Opacity="0.7" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Page>

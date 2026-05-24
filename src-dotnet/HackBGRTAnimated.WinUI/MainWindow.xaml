@@ -1,0 +1,77 @@
+﻿<Window
+    x:Class="HackBGRTAnimated.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="HackBGRT-Animated">
+
+    <NavigationView
+        x:Name="RootNavigation"
+        SelectionChanged="RootNavigation_SelectionChanged"
+        IsBackButtonVisible="Collapsed"
+        IsPaneToggleButtonVisible="True"
+        IsSettingsVisible="True"
+        PaneDisplayMode="Left"
+        PaneTitle="HackBGRT-Animated"
+        Background="{StaticResource AppBackgroundBrush}"
+        CompactPaneLength="56"
+        OpenPaneLength="300">
+
+        <NavigationView.Header>
+            <StackPanel Spacing="2">
+                <TextBlock Text="HackBGRT-Animated" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock Text="Trusted local EFI animation utility" Style="{StaticResource MutedTextStyle}"/>
+            </StackPanel>
+        </NavigationView.Header>
+
+        <NavigationView.MenuItems>
+            <NavigationViewItem Tag="dashboard" Content="Dashboard" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Home"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="themes" Content="Themes" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Pictures"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="import" Content="Import GIF" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Add"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="boot" Content="Boot Order" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Switch"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="config" Content="Config" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Setting"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="logs" Content="Logs" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Document"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Tag="advanced" Content="Advanced" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Admin"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+        </NavigationView.MenuItems>
+
+        <NavigationView.FooterMenuItems>
+            <NavigationViewItem Tag="oobe" Content="Run Setup Again" Margin="8,2">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Sync"/>
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+        </NavigationView.FooterMenuItems>
+
+        <Frame x:Name="ContentFrame"/>
+    </NavigationView>
+</Window>

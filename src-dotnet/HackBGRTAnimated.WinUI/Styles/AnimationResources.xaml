@@ -1,0 +1,13 @@
+﻿<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <EntranceThemeTransition x:Key="DefaultEntranceTransition" IsStaggeringEnabled="True"/>
+    <RepositionThemeTransition x:Key="DefaultRepositionTransition"/>
+    <PaneThemeTransition x:Key="DefaultPaneTransition" Edge="Left"/>
+
+    <TransitionCollection x:Key="DefaultItemTransitions">
+        <EntranceThemeTransition IsStaggeringEnabled="True"/>
+        <RepositionThemeTransition/>
+    </TransitionCollection>
+</ResourceDictionary>

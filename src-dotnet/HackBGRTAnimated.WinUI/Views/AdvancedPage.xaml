@@ -1,0 +1,51 @@
+﻿<Page
+    x:Class="HackBGRTAnimated.WinUI.Views.AdvancedPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:controls="using:HackBGRTAnimated.WinUI.Controls"
+    mc:Ignorable="d"
+    Background="{StaticResource AppBackgroundBrush}">
+
+    <ScrollViewer>
+        <StackPanel Margin="20" Spacing="12">
+            <Border Style="{StaticResource AppCardBorderStyle}" Background="{StaticResource AppSurfaceAltBrush}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Advanced / Legacy Tools" Style="{StaticResource PageTitleTextStyle}"/>
+                    <TextBlock Text="Use only when standard pages cannot resolve your issue." Style="{StaticResource HeroSubHeadingTextStyle}"/>
+                </StackPanel>
+            </Border>
+
+            <controls:WarningBanner
+                x:Name="DangerWarning"
+                Title="Caution"
+                Message="Legacy tools can modify firmware boot entries. Proceed only if you understand the impact."/>
+
+            <Border x:Name="DangerGateCard" Style="{StaticResource AppCardBorderStyle}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Legacy actions are hidden by default." Style="{StaticResource MutedTextStyle}"/>
+                    <Button x:Name="RevealLegacyButton" Content="I understand, show legacy actions" Style="{StaticResource GhostActionButtonStyle}" Click="RevealLegacy_OnClick"/>
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="LegacyActionsCard" Style="{StaticResource AppCardBorderStyle}" Visibility="Collapsed">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Legacy Actions" Style="{StaticResource SectionTitleTextStyle}"/>
+                    <Button Content="Launch legacy setup.exe" Style="{StaticResource SecondaryActionButtonStyle}" Click="LaunchLegacySetup_OnClick"/>
+                    <Button Content="Open repository folder" Style="{StaticResource GhostActionButtonStyle}" Click="OpenRepo_OnClick"/>
+                    <Button Content="Show raw bcdedit /enum firmware /v" Style="{StaticResource GhostActionButtonStyle}" Click="ShowRawBcdEdit_OnClick"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource AppCardMutedBorderStyle}">
+                <TextBox x:Name="DiagnosticsBox"
+                         Height="260"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         IsReadOnly="True"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
