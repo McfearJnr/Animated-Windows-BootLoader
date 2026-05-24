@@ -28,7 +28,6 @@ static struct HackBGRT_config config = {
 	.animation_fps = 24,
 	.animation_max_ms = 3500,
 	.animation_final_last = 1,
-	.animation_skip_esc = 1,
 	.animation_clear_each_frame = 1,
 	.animation_preload = 1,
 	.animation_max_preload_mb = 64,
@@ -515,7 +514,6 @@ static BOOLEAN DrawBltFrame(EFI_GRAPHICS_OUTPUT_PROTOCOL* gop, const struct Anim
 			return FALSE;
 		}
 	}
-
 	// One Blt call per frame keeps rendering atomic and reduces tearing/artifacts.
 	const UINTN delta = frame->width * sizeof(EFI_GRAPHICS_OUTPUT_BLT_PIXEL);
 	return !EFI_ERROR(gop->Blt(
@@ -529,43 +527,9 @@ static BOOLEAN DrawBltFrame(EFI_GRAPHICS_OUTPUT_PROTOCOL* gop, const struct Anim
 	));
 }
 
-static UINT32 NowMilliseconds(void) {
-	EFI_TIME now;
-	if (EFI_ERROR(RT->GetTime(&now, 0))) {
-		return 0;
-	}
-	return (UINT32) now.Hour * 3600000U
-		+ (UINT32) now.Minute * 60000U
-		+ (UINT32) now.Second * 1000U
-		+ now.Nanosecond / 1000000U;
-}
-
-static int WaitUntilOrEsc(UINT32 target_ms) {
-	while (1) {
-		UINT32 now_ms = NowMilliseconds();
-		if (now_ms == 0 || now_ms >= target_ms) {
-			return 0;
-		}
-		UINT32 remain_ms = target_ms - now_ms;
-		UINT32 slice_ms = remain_ms;
-		if (slice_ms > 20) {
-			slice_ms = 20;
-		}
-		if (slice_ms == 0) {
-			slice_ms = 1;
-		}
-		if (config.animation_skip_esc) {
-			EFI_STATUS key_wait = WaitKey(slice_ms);
-			if (key_wait != EFI_TIMEOUT) {
-				EFI_INPUT_KEY key = {0};
-				ST->ConIn->ReadKeyStroke(ST->ConIn, &key);
-				if (key.ScanCode == SCAN_ESC) {
-					return 1;
-				}
-			}
-		} else {
-			BS->Stall(slice_ms * 1000);
-		}
+static void WaitFrameDurationUs(UINTN frame_duration_us) {
+	if (frame_duration_us > 0) {
+		BS->Stall(frame_duration_us);
 	}
 }
 
@@ -602,8 +566,20 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 		GopPixelFormatName(gop->Mode->Info->PixelFormat)
 	);
 
-	const UINTN frame_ms = max(1, 1000 / config.animation_fps);
-	const UINTN max_frames = max(1, config.animation_max_ms / frame_ms);
+	int animation_fps = config.animation_fps;
+	if (animation_fps <= 0) {
+		animation_fps = 15;
+	}
+	if (animation_fps > 60) {
+		animation_fps = 60;
+	}
+	const UINTN frame_duration_us = max(1, 1000000 / (UINTN) animation_fps);
+	UINTN max_frames = ((UINTN) config.animation_max_ms * 1000U) / frame_duration_us;
+	if (max_frames == 0) {
+		max_frames = 1;
+	}
+	Log(config.debug, L"Animation timing: fps=%d, frame_us=%d, max_ms=%d.\n",
+		animation_fps, (int) frame_duration_us, config.animation_max_ms);
 
 	UINT32 frame_space = 1;
 	for (int i = 0; i < config.animation_digits && frame_space <= 100000000; ++i) {
@@ -707,8 +683,6 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 	UINTN played = 0;
 	UINTN frame_slot = 0;
 	UINT32 last_index_played = start_index;
-	UINT32 timeline_start = NowMilliseconds();
-	UINT32 render_time_sum_ms = 0;
 	int failed = 0;
 
 	while (played < max_frames) {
@@ -716,7 +690,6 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 		UINT32 current_index = start_index + (UINT32) logical_slot;
 		struct AnimationBltFrame frame = {0};
 		int frame_needs_free = 0;
-		UINT32 render_start = NowMilliseconds();
 
 		if (preloaded) {
 			frame = preloaded[logical_slot];
@@ -751,48 +724,21 @@ static BMP* PlayAnimation(EFI_FILE_HANDLE base_dir) {
 			break;
 		}
 		last_index_played = current_index;
-
-		UINT32 render_end = NowMilliseconds();
-		if (render_start && render_end && render_end >= render_start) {
-			render_time_sum_ms += render_end - render_start;
-		}
 		if (frame_needs_free) {
 			FreeBltFrame(&frame);
 		}
 
 		++played;
 		++frame_slot;
-
-		UINT32 now_ms = NowMilliseconds();
-		UINT32 target_ms = now_ms;
-		if (timeline_start && frame_ms > 0 && played <= (0xffffffffU - timeline_start) / frame_ms) {
-			target_ms = timeline_start + (UINT32) (played * frame_ms);
-		}
-		if (config.animation_skip_esc && WaitUntilOrEsc(target_ms)) {
+		if (played >= max_frames) {
 			break;
 		}
-		if (!config.animation_skip_esc) {
-			WaitUntilOrEsc(target_ms);
-		}
 
-		if (config.animation_allow_frame_skip && timeline_start) {
-			UINT32 behind_ms = NowMilliseconds();
-			if (behind_ms > timeline_start && frame_ms) {
-				UINT32 should_have_played = (behind_ms - timeline_start) / frame_ms;
-				if (should_have_played > played + 1) {
-					UINTN new_played = should_have_played > max_frames ? max_frames : (UINTN) should_have_played;
-					if (new_played > played) {
-						frame_slot += new_played - played;
-						played = new_played;
-					}
-				}
-			}
-		}
+		// Stall expects microseconds, so frame pacing is controlled by fps precisely.
+		WaitFrameDurationUs(frame_duration_us);
 	}
 
-	if (played > 0) {
-		Log(config.debug, L"Animation average frame render time: %d ms.\n", (int) (render_time_sum_ms / played));
-	}
+	Log(config.debug, L"Animation playback: displayed=%d frame(s), preload=%d.\n", (int) played, preloaded ? 1 : 0);
 	if (preloaded) {
 		CleanupPreloadedFrames(preloaded, preloaded_count);
 	}

@@ -40,10 +40,6 @@ image= path=splash.bmp
 # animation_final:
 #  - "last" keeps the final shown frame as BGRT image.
 #  - "splash" keeps normal image=... behaviour after animation.
-# animation_skip_key:
-#  - "esc" allows Escape to skip animation.
-#  - "none" disables skip.
-
 # Preferred resolution. Use 0x0 for maximum and -1x-1 for original.
 resolution=0x0
 
@@ -64,7 +60,6 @@ animation_path=\EFI\HackBGRT\animation\
 animation_prefix=frame_
 animation_digits=3
 animation_ext=.bmp
-animation_fps=10
-animation_max_ms=5000
+animation_fps=20
+animation_max_ms=4000
 animation_final=last
-animation_skip_key=esc

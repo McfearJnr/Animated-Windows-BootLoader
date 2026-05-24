@@ -224,14 +224,31 @@ void ReadConfigLine(struct HackBGRT_config* config, EFI_FILE_HANDLE base_dir, co
 		return;
 	}
 	if (StrnCmp(line, L"animation_skip_key=", 19) == 0) {
-		const CHAR16* value = line + 19;
-		if (StriCmp(value, L"esc") == 0) {
-			config->animation_skip_esc = 1;
-		} else if (StriCmp(value, L"none") == 0) {
-			config->animation_skip_esc = 0;
-		} else {
-			Log(1, L"Invalid animation_skip_key: %s\n", value);
-		}
+		// Skip key support is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_show_skip_text=", 25) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_text=", 20) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_text_color=", 26) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_text_shadow=", 27) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_text_scale=", 26) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
+		return;
+	}
+	if (StrnCmp(line, L"animation_skip_text_y_offset=", 29) == 0) {
+		// Skip text overlay is intentionally disabled for now. Keep this directive as a no-op.
 		return;
 	}
 	if (ParsePositiveInt(line, L"animation_clear_each_frame=", 0, 1, &config->animation_clear_each_frame)) {

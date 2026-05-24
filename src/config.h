@@ -64,7 +64,6 @@ struct HackBGRT_config {
 	int animation_fps;
 	int animation_max_ms;
 	int animation_final_last;
-	int animation_skip_esc;
 	int animation_clear_each_frame;
 	int animation_preload;
 	int animation_max_preload_mb;
